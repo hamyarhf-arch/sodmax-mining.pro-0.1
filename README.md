@@ -1,0 +1,1 @@
+# sodmax-mining.pro-0.1
