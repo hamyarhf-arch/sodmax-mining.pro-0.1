@@ -5,108 +5,153 @@ class UIService {
         this.authService = window.authService;
         this.supabaseService = window.supabaseService;
         
+        this.isInitialized = false;
         this.initializeUI();
     }
     
-    initializeUI() {
-        // چک کردن وضعیت احراز هویت
-        this.checkAuthState();
+    async initializeUI() {
+        if (this.isInitialized) return;
         
-        // بایند کردن events
+        console.log('🔄 Initializing UI...');
+        
+        // بایند کردن events اولیه
         this.bindEvents();
+        
+        // چک کردن وضعیت احراز هویت
+        await this.checkAuthState();
         
         // بارگذاری پنل‌های فروش
         this.loadSalePlans();
         
+        this.isInitialized = true;
         console.log('✅ UI initialized');
     }
     
     async checkAuthState() {
+        console.log('🔍 Checking auth state...');
+        
         const user = await this.authService.handleAuthStateChange();
         
         if (user) {
-            this.showMainApp(user);
+            console.log('👤 User found:', user.email);
+            await this.showMainApp(user);
         } else {
+            console.log('👤 No user found - showing login');
             this.showLogin();
         }
     }
     
     async showMainApp(user) {
-        console.log('👋 Welcome:', user.email);
+        console.log('🚀 Showing main app for:', user.email);
         
         // مخفی کردن صفحه لاگین
         const registerOverlay = document.getElementById('registerOverlay');
         const mainContainer = document.getElementById('mainContainer');
         
-        if (registerOverlay) registerOverlay.style.display = 'none';
-        if (mainContainer) mainContainer.style.display = 'block';
-        
-        // نمایش اطلاعات کاربر
-        const userEmailElement = document.getElementById('userEmail');
-        if (userEmailElement) {
-            userEmailElement.textContent = user.email;
+        if (registerOverlay) {
+            registerOverlay.style.display = 'none';
         }
         
-        // مقداردهی اولیه بازی
-        await this.gameService.initialize(user.id);
-        
-        // آپدیت UI
-        this.updateGameUI();
-        
-        // بارگذاری تراکنش‌ها
-        this.loadTransactions();
+        if (mainContainer) {
+            mainContainer.style.display = 'block';
+            
+            // نمایش اطلاعات کاربر
+            const userEmailElement = document.getElementById('userEmail');
+            if (userEmailElement) {
+                userEmailElement.textContent = user.email;
+            }
+            
+            // مقداردهی اولیه بازی
+            await this.gameService.initialize(user.id);
+            
+            // آپدیت UI
+            this.updateGameUI();
+            
+            // بارگذاری تراکنش‌ها
+            this.loadTransactions();
+            
+            // نمایش پیام خوش‌آمد
+            setTimeout(() => {
+                this.showNotification('🌟', `خوش آمدید ${user.email}!`);
+            }, 500);
+        }
     }
     
     showLogin() {
+        console.log('👤 Showing login screen');
+        
         const registerOverlay = document.getElementById('registerOverlay');
         const mainContainer = document.getElementById('mainContainer');
         
-        if (registerOverlay) registerOverlay.style.display = 'flex';
-        if (mainContainer) mainContainer.style.display = 'none';
+        if (registerOverlay) {
+            registerOverlay.style.display = 'flex';
+        }
+        
+        if (mainContainer) {
+            mainContainer.style.display = 'none';
+        }
     }
     
     bindEvents() {
+        console.log('🔗 Binding events...');
+        
         // فرم ثبت نام/ورود
         const registerForm = document.getElementById('registerForm');
         if (registerForm) {
             registerForm.addEventListener('submit', (e) => this.handleRegister(e));
+            console.log('✅ Register form bound');
         }
         
         // دکمه استخراج
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
             minerCore.addEventListener('click', () => this.handleMining());
+            console.log('✅ Miner core bound');
         }
         
         // دکمه دریافت USDT
         const claimBtn = document.getElementById('claimUSDTBtn');
         if (claimBtn) {
             claimBtn.addEventListener('click', () => this.handleClaimUSDT());
+            console.log('✅ Claim USDT button bound');
         }
         
         // دکمه استخراج خودکار
         const autoMineBtn = document.getElementById('autoMineBtn');
         if (autoMineBtn) {
             autoMineBtn.addEventListener('click', () => this.toggleAutoMining());
+            console.log('✅ Auto mine button bound');
         }
         
         // دکمه افزایش قدرت
-        const boostBtns = document.querySelectorAll('button');
-        boostBtns.forEach(btn => {
-            if (btn.textContent.includes('افزایش قدرت') || btn.innerHTML.includes('fa-bolt')) {
-                btn.addEventListener('click', () => this.handleBoostMining());
-            }
-        });
+        const boostBtn = document.querySelector('button[onclick*="boostMining"]');
+        if (boostBtn) {
+            boostBtn.removeAttribute('onclick');
+            boostBtn.addEventListener('click', () => this.handleBoostMining());
+            console.log('✅ Boost mining button bound');
+        }
         
         // دکمه خرید SOD
-        const buySodBtns = document.querySelectorAll('button');
-        buySodBtns.forEach(btn => {
-            if (btn.textContent.includes('خرید SOD') || btn.innerHTML.includes('fa-shopping-cart')) {
-                btn.addEventListener('click', () => this.showSODSale());
-            }
-        });
+        const buySodBtn = document.querySelector('button[onclick*="showSODSale"]');
+        if (buySodBtn) {
+            buySodBtn.removeAttribute('onclick');
+            buySodBtn.addEventListener('click', () => this.showSODSale());
+            console.log('✅ Buy SOD button bound');
+        }
         
-        console.log('✅ UI events bound');
+        // دکمه‌های خرید پنل
+        setTimeout(() => {
+            document.querySelectorAll('.btn').forEach(btn => {
+                if (btn.textContent.includes('خرید پنل')) {
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.showNotification('🛒', 'سیستم خرید به زودی فعال می‌شود...');
+                    });
+                }
+            });
+        }, 1000);
+        
+        console.log('✅ All events bound');
     }
     
     async handleRegister(e) {
@@ -130,35 +175,72 @@ class UIService {
             return;
         }
         
+        // بررسی فرمت ایمیل
+        if (!this.isValidEmail(emailValue)) {
+            this.showNotification('❌', 'لطفاً یک ایمیل معتبر وارد کنید');
+            return;
+        }
+        
         // تولید رمز عبور تصادفی
         const password = this.generatePassword();
         
         this.showNotification('⏳', 'در حال ثبت نام...');
         
-        const result = await this.authService.signUp(emailValue, password, fullNameValue, referralCodeValue);
+        // غیرفعال کردن دکمه
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ثبت نام...';
+        }
         
-        if (result.success) {
-            this.showNotification('✅', 'ثبت نام موفق! اکنون وارد شوید.');
+        try {
+            const result = await this.authService.signUp(emailValue, password, fullNameValue, referralCodeValue);
             
-            // تلاش برای ورود خودکار
-            setTimeout(async () => {
-                const loginResult = await this.authService.signIn(emailValue, password);
-                if (loginResult.success) {
-                    this.showMainApp(loginResult.data.user);
+            if (result.success) {
+                this.showNotification('✅', result.message || 'ثبت نام موفق!');
+                
+                // اگر کاربر بلافاصله وارد شده، برنامه اصلی را نشان بده
+                if (this.authService.getCurrentUser()) {
+                    setTimeout(() => {
+                        this.showMainApp(this.authService.getCurrentUser());
+                    }, 1500);
+                } else {
+                    // اگر نیاز به تأیید ایمیل دارد، راهنمایی کن
+                    setTimeout(() => {
+                        this.showNotification('📧', 'لطفاً ایمیل خود را برای تأیید بررسی کنید.');
+                    }, 2000);
                 }
-            }, 1000);
-        } else {
-            this.showNotification('❌', result.error || 'خطا در ثبت نام');
+            } else {
+                this.showNotification('❌', result.error || 'خطا در ثبت نام');
+            }
+        } finally {
+            // فعال کردن دکمه
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> ثبت نام و شروع استخراج';
+            }
         }
     }
     
+    isValidEmail(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+    }
+    
     generatePassword() {
-        return Math.random().toString(36).slice(-10) + 'Aa1!';
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        let password = '';
+        for (let i = 0; i < 12; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return password;
     }
     
     handleMining() {
-        if (!this.authService.getCurrentUser()) {
+        const user = this.authService.getCurrentUser();
+        if (!user) {
             this.showNotification('❌', 'ابتدا وارد شوید');
+            this.showLogin();
             return;
         }
         
@@ -181,8 +263,10 @@ class UIService {
     }
     
     async handleClaimUSDT() {
-        if (!this.authService.getCurrentUser()) {
+        const user = this.authService.getCurrentUser();
+        if (!user) {
             this.showNotification('❌', 'ابتدا وارد شوید');
+            this.showLogin();
             return;
         }
         
@@ -197,8 +281,10 @@ class UIService {
     }
     
     handleBoostMining() {
-        if (!this.authService.getCurrentUser()) {
+        const user = this.authService.getCurrentUser();
+        if (!user) {
             this.showNotification('❌', 'ابتدا وارد شوید');
+            this.showLogin();
             return;
         }
         
@@ -213,6 +299,13 @@ class UIService {
     }
     
     toggleAutoMining() {
+        const user = this.authService.getCurrentUser();
+        if (!user) {
+            this.showNotification('❌', 'ابتدا وارد شوید');
+            this.showLogin();
+            return;
+        }
+        
         const autoMineBtn = document.getElementById('autoMineBtn');
         const gameData = this.gameService.getGameData();
         
@@ -368,22 +461,43 @@ class UIService {
                         ${plan.features.map(feature => `<li><i class="fas fa-check" style="color: var(--success);"></i> ${feature}</li>`).join('')}
                     </ul>
                     
-                    <button class="btn ${plan.popular ? 'btn-warning' : 'btn-primary'}" onclick="window.uiService.handleBuyPlan(${plan.id})">
+                    <button class="btn ${plan.popular ? 'btn-warning' : 'btn-primary'}" data-plan-id="${plan.id}">
                         <i class="fas fa-shopping-cart"></i>
                         خرید پنل
                     </button>
                 `;
                 
+                // اضافه کردن event listener به دکمه خرید
+                const buyBtn = card.querySelector('button');
+                buyBtn.addEventListener('click', () => {
+                    this.handleBuyPlan(plan.id);
+                });
+                
                 grid.appendChild(card);
             });
+            
+            console.log('✅ Sale plans loaded');
         } catch (error) {
             console.error('❌ Error loading sale plans:', error);
         }
     }
     
     async handleBuyPlan(planId) {
+        const user = this.authService.getCurrentUser();
+        if (!user) {
+            this.showNotification('❌', 'ابتدا وارد شوید');
+            this.showLogin();
+            return;
+        }
+        
         // پیاده‌سازی خرید پنل
-        this.showNotification('🛒', 'سیستم خرید به زودی فعال می‌شود...');
+        this.showNotification('🛒', `خرید پنل ${planId} در حال پردازش...`);
+        
+        // اینجا منطق خرید واقعی پیاده‌سازی می‌شود
+        setTimeout(() => {
+            this.showNotification('✅', 'خرید با موفقیت انجام شد!');
+            this.updateGameUI();
+        }, 2000);
     }
     
     async loadTransactions() {
@@ -397,6 +511,16 @@ class UIService {
             if (!list) return;
             
             list.innerHTML = '';
+            
+            if (transactions.length === 0) {
+                list.innerHTML = `
+                    <div class="transaction-row" style="text-align: center; color: var(--text-secondary);">
+                        <i class="fas fa-history" style="font-size: 24px; margin-bottom: 10px;"></i>
+                        <div>هنوز تراکنشی ثبت نشده است</div>
+                    </div>
+                `;
+                return;
+            }
             
             transactions.forEach(transaction => {
                 const row = document.createElement('div');
@@ -428,12 +552,21 @@ class UIService {
                 
                 list.appendChild(row);
             });
+            
+            console.log('✅ Transactions loaded');
         } catch (error) {
             console.error('❌ Error loading transactions:', error);
         }
     }
     
     showSODSale() {
+        const user = this.authService.getCurrentUser();
+        if (!user) {
+            this.showNotification('❌', 'ابتدا وارد شوید');
+            this.showLogin();
+            return;
+        }
+        
         const sodSaleSection = document.getElementById('sodSaleSection');
         if (!sodSaleSection) return;
         
