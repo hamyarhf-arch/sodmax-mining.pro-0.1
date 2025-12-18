@@ -1,11 +1,17 @@
-// Supabase Configuration
+// Supabase Configuration - کلیدهای جدید را اینجا وارد کنید
 const SUPABASE_URL = 'https://wxxhulztrxmjqftxcetp.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4eGh1bHp0cnhtanFmdHhjZXRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgyNjY5MTAsImV4cCI6MjA1Mzg0MjkxMH0.ETQGR2SNbAcY2fgIjPUb9cDcPLmHHshZjjMF7e0YHGM';
+const SUPABASE_ANON_KEY = 'کلید_جدید_خود_را_اینجا_وارد_کنید'; eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4eGh1bHp0cnhtanFmdHhjZXRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzEwNDcsImV4cCI6MjA4MTY0NzA0N30.iC6Ief8aF-zw66RQRSnLxA-BmAjChQj9xy4HkJpGOA4
 
-// Initialize Supabase client - فقط یک بار
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Initialize Supabase client
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+    }
+});
 
-console.log('✅ Supabase initialized');
+console.log('✅ Supabase initialized with URL:', SUPABASE_URL);
 
 // ============ توابع کاربران ============
 async function getUserByEmail(email) {
@@ -17,7 +23,11 @@ async function getUserByEmail(email) {
             .single();
         
         if (error) {
-            console.error('❌ Error getting user:', error);
+            if (error.code === 'PGRST116') {
+                console.log('👤 User not found in database:', email);
+            } else {
+                console.error('❌ Error getting user:', error);
+            }
             return null;
         }
         
@@ -87,7 +97,6 @@ async function updateUser(userId, updateData) {
 // ============ توابع بازی ============
 async function getGameData(userId) {
     try {
-        // ابتدا بررسی می‌کنیم کاربر در جدول users وجود دارد
         const { data: userData, error: userError } = await supabaseClient
             .from('users')
             .select('*')
@@ -95,9 +104,9 @@ async function getGameData(userId) {
             .single();
         
         if (userError) {
-            console.error('❌ User not found in users table:', userError);
+            console.error('❌ User not found:', userError);
             
-            // اگر کاربر وجود ندارد، از localStorage استفاده کن
+            // استفاده از localStorage
             const localData = localStorage.getItem(`sodmax_game_${userId}`);
             if (localData) {
                 console.log('📱 Using local storage data');
@@ -107,16 +116,15 @@ async function getGameData(userId) {
             return null;
         }
         
-        // اگر کاربر وجود دارد، داده‌های بازی را از users بردار
         if (userData) {
-            console.log('✅ Game data loaded from users table');
+            console.log('✅ Game data loaded from database');
             return {
-                sodBalance: userData.sod_balance || 0,
+                sodBalance: userData.sod_balance || 1000000,
                 usdtBalance: userData.usdt_balance || 0,
-                todayEarnings: 0, // ریست روزانه
+                todayEarnings: 0,
                 miningPower: userData.mining_power || 10,
                 userLevel: userData.level || 1,
-                usdtProgress: userData.usdt_progress || 0,
+                usdtProgress: userData.usdt_progress || 1000000,
                 totalMined: userData.total_mined || 0,
                 lastLogin: userData.last_login,
                 createdAt: userData.created_at
@@ -132,23 +140,10 @@ async function getGameData(userId) {
 
 async function saveGameData(userId, gameData) {
     try {
-        // ابتدا بررسی می‌کنیم کاربر وجود دارد
-        const { data: userExists } = await supabaseClient
-            .from('users')
-            .select('id')
-            .eq('id', userId)
-            .single();
+        // ذخیره در localStorage به عنوان فالبک
+        localStorage.setItem(`sodmax_game_${userId}`, JSON.stringify(gameData));
         
-        if (!userExists) {
-            console.error('❌ User does not exist in database');
-            
-            // ذخیره در localStorage به عنوان فالبک
-            localStorage.setItem(`sodmax_game_${userId}`, JSON.stringify(gameData));
-            console.log('📱 Game data saved to local storage');
-            return true;
-        }
-        
-        // آپدیت داده‌های بازی در جدول users
+        // تلاش برای ذخیره در دیتابیس
         const { error } = await supabaseClient
             .from('users')
             .update({
@@ -163,11 +158,7 @@ async function saveGameData(userId, gameData) {
             .eq('id', userId);
         
         if (error) {
-            console.error('❌ Error saving game data:', error);
-            
-            // ذخیره در localStorage به عنوان فالبک
-            localStorage.setItem(`sodmax_game_${userId}`, JSON.stringify(gameData));
-            console.log('📱 Game data saved to local storage as fallback');
+            console.error('❌ Error saving to database, using local storage:', error);
             return false;
         }
         
@@ -175,10 +166,6 @@ async function saveGameData(userId, gameData) {
         return true;
     } catch (error) {
         console.error('🚨 Error in saveGameData:', error);
-        
-        // ذخیره در localStorage به عنوان فالبک
-        localStorage.setItem(`sodmax_game_${userId}`, JSON.stringify(gameData));
-        console.log('📱 Game data saved to local storage due to error');
         return false;
     }
 }
@@ -242,7 +229,7 @@ async function getSalePlans() {
         if (error) {
             console.error('❌ Error getting sale plans:', error);
             
-            // داده‌های پیش‌فرض
+            // داده‌های پیش‌فرض برای وقتی که دیتابیس در دسترس نیست
             return [
                 {
                     id: 1,
