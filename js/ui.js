@@ -6,112 +6,44 @@ class UIService {
         this.supabaseService = window.supabaseService;
         
         this.isInitialized = false;
+        this.currentUser = null;
         
-        this.initializeUI();
+        this.initialize();
     }
     
-    async initializeUI() {
+    async initialize() {
         if (this.isInitialized) return;
         
         console.log('🔄 Initializing UI...');
         
-        // بایند کردن events اولیه
+        // بایند کردن events
         this.bindEvents();
         
-        // چک کردن وضعیت احراز هویت
-        await this.checkAuthState();
-        
-        // بارگذاری پنل‌های فروش
-        await this.loadSalePlans();
+        // چک کردن وضعیت کاربر
+        await this.checkUserState();
         
         this.isInitialized = true;
         console.log('✅ UI initialized');
     }
     
-    async checkAuthState() {
-        console.log('🔍 Checking auth state...');
+    async checkUserState() {
+        console.log('🔍 Checking user state...');
         
-        const user = await this.authService.handleAuthStateChange();
-        
-        if (user) {
-            console.log('✅ User authenticated:', user.email);
-            await this.showMainApp(user);
-        } else {
-            console.log('❌ No authenticated user');
+        try {
+            // چک کردن auth state
+            const user = await this.authService.handleAuthStateChange();
+            
+            if (user) {
+                console.log('✅ User authenticated:', user.email);
+                this.currentUser = user;
+                await this.showMainApp();
+            } else {
+                console.log('❌ No authenticated user');
+                this.showRegisterForm();
+            }
+        } catch (error) {
+            console.error('❌ Error checking user state:', error);
             this.showRegisterForm();
-        }
-    }
-    
-    onUserSignedIn(user) {
-        console.log('🎉 User signed in callback:', user.email);
-        this.showMainApp(user);
-    }
-    
-    onUserSignedOut() {
-        console.log('👋 User signed out callback');
-        this.showRegisterForm();
-    }
-    
-    async showMainApp(user) {
-        console.log('🚀 Showing main app for:', user.email);
-        
-        // مخفی کردن صفحه ثبت‌نام
-        const registerOverlay = document.getElementById('registerOverlay');
-        const mainContainer = document.getElementById('mainContainer');
-        
-        if (registerOverlay) {
-            registerOverlay.style.display = 'none';
-        }
-        
-        if (mainContainer) {
-            mainContainer.style.display = 'block';
-            
-            // نمایش اطلاعات کاربر
-            const userEmailElement = document.getElementById('userEmail');
-            if (userEmailElement) {
-                userEmailElement.textContent = user.email;
-            }
-            
-            // نمایش نام کاربر
-            const userNameElement = document.getElementById('userName');
-            if (userNameElement) {
-                userNameElement.textContent = user.user_metadata?.full_name || user.email.split('@')[0];
-            }
-            
-            // مقداردهی اولیه بازی
-            await this.gameService.initialize(user.id);
-            
-            // آپدیت UI
-            this.updateGameUI();
-            
-            // بارگذاری تراکنش‌ها
-            this.loadTransactions();
-            
-            // نمایش پیام خوش‌آمد
-            setTimeout(() => {
-                this.showNotification('🌟', `خوش آمدید ${user.user_metadata?.full_name || 'کاربر'}!`);
-            }, 500);
-        }
-    }
-    
-    showRegisterForm() {
-        console.log('📝 Showing register form');
-        
-        const registerOverlay = document.getElementById('registerOverlay');
-        const mainContainer = document.getElementById('mainContainer');
-        
-        if (registerOverlay) {
-            registerOverlay.style.display = 'flex';
-            
-            // ریست فرم
-            const registerForm = document.getElementById('registerForm');
-            if (registerForm) {
-                registerForm.reset();
-            }
-        }
-        
-        if (mainContainer) {
-            mainContainer.style.display = 'none';
         }
     }
     
@@ -147,20 +79,20 @@ class UIService {
         }
         
         // دکمه افزایش قدرت
-        const boostBtn = document.querySelector('button[onclick*="boostMining"]');
-        if (boostBtn) {
-            boostBtn.removeAttribute('onclick');
-            boostBtn.addEventListener('click', () => this.handleBoostMining());
-            console.log('✅ Boost mining button bound');
-        }
+        const boostBtns = document.querySelectorAll('button');
+        boostBtns.forEach(btn => {
+            if (btn.textContent.includes('افزایش قدرت') || btn.innerHTML.includes('fa-bolt')) {
+                btn.addEventListener('click', () => this.handleBoostMining());
+            }
+        });
         
         // دکمه خرید SOD
-        const buySodBtn = document.querySelector('button[onclick*="showSODSale"]');
-        if (buySodBtn) {
-            buySodBtn.removeAttribute('onclick');
-            buySodBtn.addEventListener('click', () => this.showSODSale());
-            console.log('✅ Buy SOD button bound');
-        }
+        const buySodBtns = document.querySelectorAll('button');
+        buySodBtns.forEach(btn => {
+            if (btn.textContent.includes('خرید SOD') || btn.innerHTML.includes('fa-shopping-cart')) {
+                btn.addEventListener('click', () => this.showSODSale());
+            }
+        });
         
         // دکمه خروج
         const logoutBtn = document.getElementById('logoutBtn');
@@ -169,48 +101,100 @@ class UIService {
             console.log('✅ Logout button bound');
         }
         
-        // لینک ورود مستقیم (برای کاربرانی که قبلاً ثبت‌نام کرده‌اند)
-        const loginLink = document.getElementById('loginLink');
-        if (loginLink) {
-            loginLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.showLoginModal();
-            });
-            console.log('✅ Login link bound');
+        console.log('✅ All events bound');
+    }
+    
+    async showMainApp() {
+        if (!this.currentUser) return;
+        
+        console.log('🚀 Showing main app for:', this.currentUser.email);
+        
+        // مخفی کردن صفحه ثبت‌نام
+        const registerOverlay = document.getElementById('registerOverlay');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        if (registerOverlay) {
+            registerOverlay.style.display = 'none';
         }
         
-        console.log('✅ All events bound');
+        if (mainContainer) {
+            mainContainer.style.display = 'block';
+            
+            // نمایش اطلاعات کاربر
+            const userEmailElement = document.getElementById('userEmail');
+            if (userEmailElement) {
+                userEmailElement.textContent = this.currentUser.email;
+            }
+            
+            // نمایش نام کاربر
+            const userNameElement = document.getElementById('userName');
+            if (userNameElement) {
+                userNameElement.textContent = this.currentUser.user_metadata?.full_name || this.currentUser.email.split('@')[0];
+            }
+            
+            // مقداردهی اولیه بازی
+            await this.gameService.initialize(this.currentUser.id);
+            
+            // آپدیت UI بازی
+            this.updateGameUI();
+            
+            // بارگذاری پنل‌های فروش
+            await this.loadSalePlans();
+            
+            // بارگذاری تراکنش‌ها
+            await this.loadTransactions();
+            
+            // نمایش پیام خوش‌آمد
+            setTimeout(() => {
+                this.showNotification('🌟', `خوش آمدید ${this.currentUser.user_metadata?.full_name || 'کاربر'}!`);
+            }, 500);
+        }
+    }
+    
+    showRegisterForm() {
+        console.log('📝 Showing register form');
+        
+        const registerOverlay = document.getElementById('registerOverlay');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        if (registerOverlay) {
+            registerOverlay.style.display = 'flex';
+        }
+        
+        if (mainContainer) {
+            mainContainer.style.display = 'none';
+        }
     }
     
     async handleRegister(e) {
         e.preventDefault();
         
-        const fullName = document.getElementById('fullName');
-        const email = document.getElementById('email');
-        const referralCode = document.getElementById('referralCode');
+        const fullNameInput = document.getElementById('fullName');
+        const emailInput = document.getElementById('email');
+        const referralCodeInput = document.getElementById('referralCode');
+        
+        if (!fullNameInput || !emailInput) {
+            this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
+            return;
+        }
+        
+        const fullName = fullNameInput.value.trim();
+        const email = emailInput.value.trim();
+        const referralCode = referralCodeInput ? referralCodeInput.value.trim() : '';
         
         if (!fullName || !email) {
             this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
             return;
         }
         
-        const fullNameValue = fullName.value.trim();
-        const emailValue = email.value.trim();
-        const referralCodeValue = referralCode ? referralCode.value.trim() : '';
-        
-        if (!fullNameValue || !emailValue) {
-            this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
-            return;
-        }
-        
         // بررسی فرمت ایمیل
-        if (!this.isValidEmail(emailValue)) {
+        if (!this.isValidEmail(email)) {
             this.showNotification('❌', 'لطفاً یک ایمیل معتبر وارد کنید');
             return;
         }
         
         // تولید رمز عبور تصادفی
-        const password = this.generatePassword();
+        const password = this.generateStrongPassword();
         
         this.showNotification('⏳', 'در حال ثبت‌نام...');
         
@@ -222,26 +206,31 @@ class UIService {
         }
         
         try {
-            const result = await this.authService.signUp(emailValue, password, fullNameValue, referralCodeValue);
+            const result = await this.authService.signUp(email, password, fullName, referralCode);
             
             if (result.success) {
-                this.showNotification('✅', result.message);
+                this.showNotification('✅', result.message || 'ثبت‌نام موفقیت‌آمیز بود!');
                 
-                // اگر کاربر بلافاصله وارد شد
+                // ذخیره اطلاعات کاربر موقتاً
+                localStorage.setItem('temp_email', email);
+                localStorage.setItem('temp_password', password);
+                
+                // اگر کاربر وارد شد، برنامه اصلی را نشان بده
                 if (this.authService.getCurrentUser()) {
+                    this.currentUser = this.authService.getCurrentUser();
                     setTimeout(() => {
-                        this.showMainApp(this.authService.getCurrentUser());
+                        this.showMainApp();
                     }, 1500);
                 } else {
                     // اگر نیاز به تأیید ایمیل دارد
-                    setTimeout(() => {
-                        this.showNotification('📧', 'لطفاً ایمیل خود را برای تأیید بررسی کنید.');
-                        this.showRegisterForm(); // بازگشت به فرم ثبت‌نام
-                    }, 2000);
+                    this.showEmailConfirmation(email, password);
                 }
             } else {
                 this.showNotification('❌', result.error || 'خطا در ثبت‌نام');
             }
+        } catch (error) {
+            console.error('❌ Registration error:', error);
+            this.showNotification('❌', 'خطای غیرمنتظره در ثبت‌نام');
         } finally {
             // فعال کردن دکمه
             if (submitBtn) {
@@ -251,108 +240,123 @@ class UIService {
         }
     }
     
+    showEmailConfirmation(email, password) {
+        // نمایش پیام تأیید ایمیل
+        const confirmHTML = `
+            <div class="register-overlay" style="z-index: 3000;">
+                <div class="register-container">
+                    <div class="register-header">
+                        <div class="register-icon">📧</div>
+                        <h1 class="register-title">تأیید ایمیل</h1>
+                        <p class="register-subtitle">لینک تأیید به ایمیل شما ارسال شد</p>
+                    </div>
+                    
+                    <div style="text-align: center; padding: 20px;">
+                        <div style="margin-bottom: 20px;">
+                            <i class="fas fa-envelope" style="font-size: 48px; color: var(--primary); margin-bottom: 20px;"></i>
+                            <p style="color: var(--text-secondary); margin-bottom: 10px;">
+                                لینک تأیید به آدرس زیر ارسال شد:
+                            </p>
+                            <p style="font-weight: bold; color: var(--primary-light);">
+                                ${email}
+                            </p>
+                        </div>
+                        
+                        <div style="background: rgba(0, 102, 255, 0.1); padding: 15px; border-radius: var(--radius); margin-bottom: 20px;">
+                            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 10px;">
+                                <i class="fas fa-info-circle"></i>
+                                اطلاعات ورود شما:
+                            </p>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 5px;">
+                                <strong>ایمیل:</strong> ${email}
+                            </p>
+                            <p style="font-size: 11px; color: var(--text-secondary);">
+                                <strong>رمز عبور:</strong> ${password}
+                            </p>
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px; justify-content: center;">
+                            <button class="btn btn-primary" onclick="window.uiService.checkEmailConfirmation()">
+                                <i class="fas fa-sync-alt"></i>
+                                بررسی تأیید
+                            </button>
+                            <button class="btn btn-outline" onclick="window.uiService.closeEmailConfirmation()">
+                                <i class="fas fa-times"></i>
+                                بستن
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // اضافه کردن به صفحه
+        const confirmContainer = document.createElement('div');
+        confirmContainer.id = 'emailConfirmation';
+        confirmContainer.innerHTML = confirmHTML;
+        document.body.appendChild(confirmContainer);
+    }
+    
+    closeEmailConfirmation() {
+        const confirmContainer = document.getElementById('emailConfirmation');
+        if (confirmContainer) {
+            confirmContainer.remove();
+        }
+        this.showRegisterForm();
+    }
+    
+    async checkEmailConfirmation() {
+        this.showNotification('⏳', 'در حال بررسی تأیید ایمیل...');
+        
+        const email = localStorage.getItem('temp_email');
+        const password = localStorage.getItem('temp_password');
+        
+        if (!email || !password) {
+            this.showNotification('❌', 'اطلاعات ورود پیدا نشد');
+            return;
+        }
+        
+        try {
+            // تلاش برای ورود با اطلاعات ذخیره شده
+            const result = await this.authService.signIn(email, password);
+            
+            if (result.success) {
+                this.showNotification('✅', 'ایمیل تأیید شد! وارد شدید.');
+                this.currentUser = this.authService.getCurrentUser();
+                this.closeEmailConfirmation();
+                await this.showMainApp();
+            } else {
+                this.showNotification('⚠️', 'ایمیل هنوز تأیید نشده است. لطفاً ایمیل خود را بررسی کنید.');
+            }
+        } catch (error) {
+            console.error('❌ Email confirmation error:', error);
+            this.showNotification('❌', 'خطا در بررسی تأیید ایمیل');
+        }
+    }
+    
     async handleLogout() {
         const confirmLogout = confirm('آیا مطمئن هستید که می‌خواهید خارج شوید؟');
         
         if (!confirmLogout) return;
         
-        const result = await this.authService.signOut();
-        
-        if (result.success) {
-            this.showNotification('👋', result.message);
-            this.showRegisterForm();
-        } else {
-            this.showNotification('❌', result.error || 'خطا در خروج');
-        }
-    }
-    
-    showLoginModal() {
-        // ایجاد مدال برای ورود مستقیم
-        const modalHTML = `
-            <div class="register-overlay" style="z-index: 3000;">
-                <div class="register-container">
-                    <div class="register-header">
-                        <div class="register-icon">🔑</div>
-                        <h1 class="register-title">ورود مستقیم</h1>
-                        <p class="register-subtitle">اگر قبلاً ثبت‌نام کرده‌اید، با ایمیل و رمز عبور وارد شوید</p>
-                    </div>
-                    
-                    <form id="directLoginForm">
-                        <div class="form-group">
-                            <label class="form-label">ایمیل</label>
-                            <input type="email" class="form-input" placeholder="example@gmail.com" id="loginEmail" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">رمز عبور</label>
-                            <input type="password" class="form-input" placeholder="رمز عبور خود را وارد کنید" id="loginPassword" required>
-                            <div class="form-hint" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                                رمز عبور هنگام ثبت‌نام به ایمیل شما ارسال شد
-                            </div>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-sign-in-alt"></i>
-                            ورود به حساب
-                        </button>
-                        
-                        <button type="button" class="btn btn-outline" style="margin-top: 12px;" onclick="window.uiService.closeLoginModal()">
-                            <i class="fas fa-times"></i>
-                            بازگشت
-                        </button>
-                    </form>
-                </div>
-            </div>
-        `;
-        
-        // اضافه کردن مدال به صفحه
-        const modalContainer = document.createElement('div');
-        modalContainer.id = 'loginModal';
-        modalContainer.innerHTML = modalHTML;
-        document.body.appendChild(modalContainer);
-        
-        // بایند کردن فرم ورود
-        setTimeout(() => {
-            const loginForm = document.getElementById('directLoginForm');
-            if (loginForm) {
-                loginForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    
-                    const email = document.getElementById('loginEmail').value.trim();
-                    const password = document.getElementById('loginPassword').value.trim();
-                    
-                    if (!email || !password) {
-                        this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
-                        return;
-                    }
-                    
-                    this.showNotification('⏳', 'در حال ورود...');
-                    
-                    // در نسخه فعلی، ما signIn نداریم، پس باید چک کنیم
-                    // برای تست، از signUp با همان ایمیل استفاده می‌کنیم
-                    const result = await this.authService.signUp(email, password, 'کاربر قدیمی', '');
-                    
-                    if (result.success) {
-                        this.showNotification('✅', 'ورود موفقیت‌آمیز بود!');
-                        this.closeLoginModal();
-                    } else {
-                        this.showNotification('❌', result.error || 'خطا در ورود');
-                    }
-                });
+        try {
+            const result = await this.authService.signOut();
+            
+            if (result.success) {
+                this.showNotification('👋', result.message || 'خروج موفقیت‌آمیز بود!');
+                this.currentUser = null;
+                this.showRegisterForm();
+            } else {
+                this.showNotification('❌', result.error || 'خطا در خروج');
             }
-        }, 100);
-    }
-    
-    closeLoginModal() {
-        const modal = document.getElementById('loginModal');
-        if (modal) {
-            modal.remove();
+        } catch (error) {
+            console.error('❌ Logout error:', error);
+            this.showNotification('❌', 'خطای غیرمنتظره در خروج');
         }
     }
     
     handleMining() {
-        const user = this.authService.getCurrentUser();
-        if (!user) {
+        if (!this.currentUser) {
             this.showNotification('❌', 'ابتدا ثبت‌نام کنید');
             this.showRegisterForm();
             return;
@@ -377,8 +381,7 @@ class UIService {
     }
     
     async handleClaimUSDT() {
-        const user = this.authService.getCurrentUser();
-        if (!user) {
+        if (!this.currentUser) {
             this.showNotification('❌', 'ابتدا ثبت‌نام کنید');
             this.showRegisterForm();
             return;
@@ -395,8 +398,7 @@ class UIService {
     }
     
     handleBoostMining() {
-        const user = this.authService.getCurrentUser();
-        if (!user) {
+        if (!this.currentUser) {
             this.showNotification('❌', 'ابتدا ثبت‌نام کنید');
             this.showRegisterForm();
             return;
@@ -413,8 +415,7 @@ class UIService {
     }
     
     toggleAutoMining() {
-        const user = this.authService.getCurrentUser();
-        if (!user) {
+        if (!this.currentUser) {
             this.showNotification('❌', 'ابتدا ثبت‌نام کنید');
             this.showRegisterForm();
             return;
@@ -448,6 +449,8 @@ class UIService {
     }
     
     updateGameUI() {
+        if (!this.currentUser) return;
+        
         const gameData = this.gameService.getGameData();
         const format = this.gameService.formatNumber.bind(this.gameService);
         
@@ -541,28 +544,77 @@ class UIService {
         }, 4000);
     }
     
+    // ============ توابع کمکی ============
+    
+    isValidEmail(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+    }
+    
+    generateStrongPassword() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        let password = '';
+        for (let i = 0; i < 12; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return password;
+    }
+    
     // ============ بارگذاری پنل‌های فروش ============
     
     async loadSalePlans() {
         try {
             console.log('🛒 Loading sale plans...');
             
-            if (!this.supabaseService || !this.supabaseService.getSalePlans) {
-                console.error('❌ supabaseService not available');
-                return;
-            }
-            
-            const plans = await this.supabaseService.getSalePlans();
             const grid = document.getElementById('salePlansGrid');
-            
             if (!grid) {
                 console.log('📋 Sale plans grid not found');
                 return;
             }
             
+            // داده‌های پیش‌فرض
+            const defaultPlans = [
+                {
+                    id: 1,
+                    name: "پنل استارتر",
+                    price: 1,
+                    sod_amount: 5000000,
+                    features: ["۵,۰۰۰,۰۰۰ SOD", "هدیه ۵۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵٪"],
+                    popular: false,
+                    discount: 0
+                },
+                {
+                    id: 2,
+                    name: "پنل پرو",
+                    price: 5,
+                    sod_amount: 30000000,
+                    features: ["۳۰,۰۰۰,۰۰۰ SOD", "هدیه ۳,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۱۵٪"],
+                    popular: true,
+                    discount: 10
+                },
+                {
+                    id: 3,
+                    name: "پنل پلاتینیوم",
+                    price: 15,
+                    sod_amount: 100000000,
+                    features: ["۱۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۱۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۳۰٪"],
+                    popular: false,
+                    discount: 15
+                },
+                {
+                    id: 4,
+                    name: "پنل الماس",
+                    price: 50,
+                    sod_amount: 500000000,
+                    features: ["۵۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۵۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵۰٪"],
+                    popular: false,
+                    discount: 20
+                }
+            ];
+            
             grid.innerHTML = '';
             
-            plans.forEach(plan => {
+            defaultPlans.forEach(plan => {
                 const card = document.createElement('div');
                 card.className = `sale-plan-card ${plan.popular ? 'featured' : ''}`;
                 
@@ -597,21 +649,19 @@ class UIService {
                 grid.appendChild(card);
             });
             
-            console.log('✅ Sale plans loaded:', plans.length, 'plans');
+            console.log('✅ Sale plans loaded');
         } catch (error) {
             console.error('❌ Error loading sale plans:', error);
         }
     }
     
     async handleBuyPlan(planId) {
-        const user = this.authService.getCurrentUser();
-        if (!user) {
+        if (!this.currentUser) {
             this.showNotification('❌', 'ابتدا ثبت‌نام کنید');
             this.showRegisterForm();
             return;
         }
         
-        // پیاده‌سازی خرید پنل
         this.showNotification('🛒', `خرید پنل ${planId} در حال پردازش...`);
         
         // اینجا منطق خرید واقعی پیاده‌سازی می‌شود
@@ -624,8 +674,7 @@ class UIService {
     // ============ بارگذاری تراکنش‌ها ============
     
     async loadTransactions() {
-        const user = this.authService.getCurrentUser();
-        if (!user) return;
+        if (!this.currentUser) return;
         
         try {
             const transactions = await this.gameService.getRecentTransactions(10);
@@ -680,15 +729,14 @@ class UIService {
                 list.appendChild(row);
             });
             
-            console.log('✅ Transactions loaded:', transactions.length, 'transactions');
+            console.log('✅ Transactions loaded');
         } catch (error) {
             console.error('❌ Error loading transactions:', error);
         }
     }
     
     showSODSale() {
-        const user = this.authService.getCurrentUser();
-        if (!user) {
+        if (!this.currentUser) {
             this.showNotification('❌', 'ابتدا ثبت‌نام کنید');
             this.showRegisterForm();
             return;
@@ -704,43 +752,25 @@ class UIService {
         });
     }
     
-    // ============ توابع کمکی ============
-    
-    isValidEmail(email) {
-        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return re.test(email);
-    }
-    
-    generatePassword() {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-        let password = '';
-        for (let i = 0; i < 12; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return password;
-    }
-    
-    showTerms() {
-        this.showNotification('📜', 'قوانین و شرایط سرویس');
-        // می‌توانید یک مدال یا صفحه جداگانه برای نمایش شرایط ایجاد کنید
-    }
-    
-    // ============ تابع برای تست سریع ============
-    
-    async testLogin() {
-        // برای تست سریع
-        this.showNotification('🧪', 'در حال تست ورود...');
-        
-        const testEmail = 'test@example.com';
+    // تابع برای تست سریع
+    async testQuickLogin() {
+        const testEmail = `test${Date.now()}@test.com`;
         const testPassword = 'Test123!@#';
+        const testName = 'تست کاربر';
         
-        const result = await this.authService.signUp(testEmail, testPassword, 'تست کاربر', '');
+        this.showNotification('🧪', 'در حال تست ثبت‌نام...');
+        
+        const result = await this.authService.signUp(testEmail, testPassword, testName, '');
         
         if (result.success) {
-            this.showNotification('✅', 'تست ورود موفق بود!');
-            this.showMainApp(this.authService.getCurrentUser());
+            this.showNotification('✅', 'تست ثبت‌نام موفق بود!');
+            this.currentUser = this.authService.getCurrentUser();
+            
+            if (this.currentUser) {
+                await this.showMainApp();
+            }
         } else {
-            this.showNotification('❌', 'تست ورود ناموفق: ' + result.error);
+            this.showNotification('❌', 'تست ثبت‌نام ناموفق: ' + result.error);
         }
     }
 }
@@ -748,3 +778,6 @@ class UIService {
 // ایجاد instance و export
 window.uiService = new UIService();
 console.log('✅ UI service loaded');
+
+// اضافه کردن تابع تست به window برای دسترسی آسان
+window.testQuickLogin = () => window.uiService.testQuickLogin();
