@@ -364,4 +364,34 @@ class UIService {
                         <div style="flex: 1;">
                             <div style="font-weight: bold;">
                                 ${transaction.type === 'mining' ? 'استخراج' : 
-                                 transaction.type
+                                 transaction.type === 'purchase' ? 'خرید SOD' : 
+                                 transaction.type === 'withdrawal' ? 'دریافت USDT' : 'تراکنش'}
+                            </div>
+                            <div style="color: var(--text-secondary); font-size: 12px;">${date}</div>
+                            <div style="color: var(--text-secondary); font-size: 11px;">${transaction.description || ''}</div>
+                        </div>
+                        <div style="font-weight: bold; color: ${transaction.type === 'withdrawal' ? 'var(--accent)' : 'var(--primary-light)'};">
+                            ${transaction.type === 'withdrawal' ? '-' : '+'}${transaction.amount} ${transaction.currency}
+                        </div>
+                    </div>
+                `;
+                
+                list.appendChild(row);
+            });
+        } catch (error) {
+            console.error('❌ Error loading transactions:', error);
+        }
+    }
+    
+    showSODSale() {
+        document.getElementById('sodSaleSection').style.display = 'block';
+        document.getElementById('sodSaleSection').scrollIntoView({ 
+            behavior: 'smooth',
+            block: 'start'
+        });
+    }
+}
+
+// ایجاد instance و export
+window.uiService = new UIService();
+console.log('✅ UI service loaded');
