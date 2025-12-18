@@ -150,7 +150,20 @@ class UIService {
             }, 500);
         }
     }
-    
+    // در فایل ui.js، داخل کلاس UIService
+onUserSignedIn(userData) {
+    console.log('✅ User signed in callback from UI:', userData);
+    // مخفی کردن فرم ثبت‌نام
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) registerForm.classList.add('hidden');
+    // نمایش بخش اصلی ماینر
+    const minerCore = document.getElementById('minerCore');
+    if (minerCore) minerCore.classList.remove('hidden');
+    // آپدیت اطلاعات روی صفحه (اگر تابع updateUserStats دارید)
+    if (this.updateUserStats && userData) {
+        this.updateUserStats(userData);
+    }
+}
     showRegisterForm() {
         console.log('📝 Showing register form');
         
