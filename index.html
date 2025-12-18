@@ -1789,27 +1789,18 @@
     
     <!-- Supabase Integration -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<!-- قبل از بسته شدن تگ </body> این کدها را جایگزین کن -->
-<script type="module" src="./supabase.js"></script>
-<script type="module">
-    import { AuthService } from './auth.js';
-    import { GameService } from './game.js';
-    import { UIService } from './ui.js';
-    
-    // وقتی DOM کامل لود شد
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('🚀 SODmAX Pro starting...');
-        
-        // Initialize services
-        window.authService = new AuthService();
-        window.gameService = new GameService();
-        window.uiService = new UIService();
-        
-        console.log('🎉 All services initialized!');
-    });
+<!-- Supabase Integration -->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<!-- فایل‌های Supabase شما -->
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/offline.js"></script> <!-- اضافه کردن این خط -->
 </script>
 </body>
 </html>
+
 
 
 
