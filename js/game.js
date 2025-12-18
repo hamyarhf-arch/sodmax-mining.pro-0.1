@@ -34,7 +34,7 @@ class GameService {
         if (!this.userId) return;
         
         try {
-            const savedData = await supabaseService.getGameData(this.userId);
+            const savedData = await window.supabaseService.getGameData(this.userId);
             
             if (savedData) {
                 this.gameData = {
@@ -58,7 +58,7 @@ class GameService {
         if (!this.userId) return false;
         
         try {
-            const success = await supabaseService.saveGameData(this.userId, this.gameData);
+            const success = await window.supabaseService.saveGameData(this.userId, this.gameData);
             
             if (success) {
                 console.log('💾 Game data saved to database');
@@ -143,7 +143,7 @@ class GameService {
         
         // ثبت تراکنش
         if (this.userId) {
-            supabaseService.addTransaction(this.userId, {
+            window.supabaseService.addTransaction(this.userId, {
                 type: 'purchase',
                 amount: totalSOD,
                 currency: 'SOD',
@@ -174,7 +174,7 @@ class GameService {
         
         // ثبت تراکنش
         if (this.userId) {
-            supabaseService.addTransaction(this.userId, {
+            window.supabaseService.addTransaction(this.userId, {
                 type: 'withdrawal',
                 amount: usdtToClaim,
                 currency: 'USDT',
@@ -236,7 +236,7 @@ class GameService {
     
     formatNumber(num) {
         if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
-        if (num >= 1000000) return (num / 1000000000).toFixed(1) + 'M';
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
         if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
         return Math.floor(num).toLocaleString('fa-IR');
     }
