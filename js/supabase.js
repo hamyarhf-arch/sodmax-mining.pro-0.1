@@ -2,15 +2,15 @@
 const SUPABASE_URL = 'https://wxxhulztrxmjqftxcetp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4eGh1bHp0cnhtanFmdHhjZXRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgyNjY5MTAsImV4cCI6MjA1Mzg0MjkxMH0.ETQGR2SNbAcY2fgIjPUb9cDcPLmHHshZjjMF7e0YHGM';
 
-// Initialize Supabase client
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Initialize Supabase client - فقط یک بار
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 console.log('✅ Supabase initialized');
 
 // ============ توابع کاربران ============
 async function getUserByEmail(email) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('users')
             .select('*')
             .eq('email', email)
@@ -30,7 +30,7 @@ async function getUserByEmail(email) {
 
 async function createUser(userData) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('users')
             .insert([{
                 email: userData.email,
@@ -63,7 +63,7 @@ async function createUser(userData) {
 
 async function updateUser(userId, updateData) {
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('users')
             .update({
                 ...updateData,
@@ -88,7 +88,7 @@ async function updateUser(userId, updateData) {
 async function getGameData(userId) {
     try {
         // ابتدا بررسی می‌کنیم کاربر در جدول users وجود دارد
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabaseClient
             .from('users')
             .select('*')
             .eq('id', userId)
@@ -133,7 +133,7 @@ async function getGameData(userId) {
 async function saveGameData(userId, gameData) {
     try {
         // ابتدا بررسی می‌کنیم کاربر وجود دارد
-        const { data: userExists } = await supabase
+        const { data: userExists } = await supabaseClient
             .from('users')
             .select('id')
             .eq('id', userId)
@@ -149,7 +149,7 @@ async function saveGameData(userId, gameData) {
         }
         
         // آپدیت داده‌های بازی در جدول users
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('users')
             .update({
                 sod_balance: gameData.sodBalance,
@@ -186,7 +186,7 @@ async function saveGameData(userId, gameData) {
 // ============ توابع تراکنش‌ها ============
 async function addTransaction(userId, transaction) {
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('transactions')
             .insert([{
                 user_id: userId,
@@ -212,7 +212,7 @@ async function addTransaction(userId, transaction) {
 
 async function getTransactions(userId, limit = 20) {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('transactions')
             .select('*')
             .eq('user_id', userId)
@@ -234,7 +234,7 @@ async function getTransactions(userId, limit = 20) {
 // ============ توابع پنل‌های فروش ============
 async function getSalePlans() {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('sale_plans')
             .select('*')
             .order('price', { ascending: true });
@@ -291,7 +291,7 @@ async function getSalePlans() {
 }
 
 // ============ Export functions ============
-window.supabaseService = {
+const supabaseService = {
     // User functions
     getUserByEmail,
     createUser,
@@ -306,7 +306,14 @@ window.supabaseService = {
     getTransactions,
     
     // Sale plans
-    getSalePlans
+    getSalePlans,
+    
+    // Supabase client for auth
+    client: supabaseClient
 };
 
 console.log('✅ Supabase service loaded');
+
+// Export برای استفاده در سایر فایل‌ها
+window.supabaseService = supabaseService;
+window.supabaseClient = supabaseClient;
