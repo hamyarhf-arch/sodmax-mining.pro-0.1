@@ -2,7 +2,6 @@
 class AuthService {
     constructor() {
         this.currentUser = null;
-        this.userVerified = false;
         this.supabase = window.supabaseClient;
         
         // چک کردن کاربر از localStorage
@@ -16,9 +15,6 @@ class AuthService {
                 this.handleSignedIn(session.user);
             } else if (event === 'SIGNED_OUT') {
                 this.handleSignedOut();
-            } else if (event === 'USER_UPDATED') {
-                console.log('👤 User updated');
-                this.checkUserVerification();
             }
         });
     }
@@ -55,92 +51,49 @@ class AuthService {
     
     async handleSignedIn(user) {
         console.log('👤 User signed in:', user.email);
+        this.currentUser = user;
+        this.saveUserToStorage(user);
         
-        // بررسی اینکه آیا کاربر واقعاً در دیتابیس ما ثبت‌نام کرده است
-        const isRegistered = await this.checkUserRegistration(user);
+        // ایجاد کاربر در دیتابیس ما (اگر وجود ندارد)
+        await this.ensureUserInDatabase(user);
         
-        if (isRegistered) {
-            this.currentUser = user;
-            this.userVerified = true;
-            this.saveUserToStorage(user);
-            console.log('✅ User verified and registered');
-            
-            // اطلاع‌رسانی به UI
-            if (window.uiService) {
-                window.uiService.onUserVerified(user);
-            }
-        } else {
-            console.log('⚠️ User not registered in database');
-            await this.signOut();
-            
-            // نمایش پیام به کاربر
-            if (window.uiService) {
-                window.uiService.showNotification('❌', 'شما ثبت‌نام نکرده‌اید. لطفاً ابتدا ثبت‌نام کنید.');
-            }
+        // اطلاع‌رسانی به UI
+        if (window.uiService) {
+            window.uiService.onUserSignedIn(user);
         }
     }
     
-    async checkUserRegistration(user) {
+    async ensureUserInDatabase(user) {
         try {
-            console.log('🔍 Checking user registration for:', user.email);
-            
-            // 1. بررسی اینکه آیا کاربر ایمیل خود را تأیید کرده است
-            if (!user.email_confirmed_at && !user.confirmed_at) {
-                console.log('❌ Email not confirmed');
-                return false;
-            }
-            
-            // 2. بررسی وجود کاربر در جدول users ما
+            // چک کردن وجود کاربر در دیتابیس
             const existingUser = await window.supabaseService.getUserByEmail(user.email);
             
-            if (existingUser) {
-                console.log('✅ User found in database');
-                return true;
+            if (!existingUser) {
+                console.log('👤 Creating new user in database:', user.email);
+                
+                // ایجاد کاربر جدید
+                const createdUser = await window.supabaseService.createUser({
+                    id: user.id,
+                    email: user.email,
+                    fullName: user.user_metadata?.full_name || user.email.split('@')[0],
+                    referralCode: user.user_metadata?.referral_code || ''
+                });
+                
+                if (createdUser) {
+                    console.log('✅ User created in database');
+                } else {
+                    console.log('⚠️ User created in local storage only');
+                }
+            } else {
+                console.log('✅ User already exists in database');
             }
-            
-            // 3. اگر کاربر در دیتابیس ما نیست، ایجادش کن
-            console.log('👤 Creating user in database...');
-            const createdUser = await window.supabaseService.createUser({
-                id: user.id,
-                email: user.email,
-                fullName: user.user_metadata?.full_name || user.email.split('@')[0],
-                referralCode: user.user_metadata?.referral_code || ''
-            });
-            
-            return !!createdUser;
         } catch (error) {
-            console.error('🚨 Error checking user registration:', error);
-            return false;
-        }
-    }
-    
-    async checkUserVerification() {
-        if (!this.currentUser) return false;
-        
-        try {
-            const { data: { user }, error } = await this.supabase.auth.getUser();
-            
-            if (error) {
-                console.error('❌ Error getting user for verification:', error);
-                return false;
-            }
-            
-            if (user) {
-                const isVerified = await this.checkUserRegistration(user);
-                this.userVerified = isVerified;
-                return isVerified;
-            }
-            
-            return false;
-        } catch (error) {
-            console.error('🚨 Error in checkUserVerification:', error);
-            return false;
+            console.error('🚨 Error ensuring user in database:', error);
         }
     }
     
     handleSignedOut() {
         this.currentUser = null;
-        this.userVerified = false;
         this.clearUserStorage();
         console.log('👤 User signed out and storage cleared');
         
@@ -158,24 +111,12 @@ class AuthService {
             
             if (error) {
                 console.log('👤 Auth error:', error.message);
-                this.handleSignedOut();
                 return null;
             }
             
             if (user) {
-                const isRegistered = await this.checkUserRegistration(user);
-                
-                if (isRegistered) {
-                    this.currentUser = user;
-                    this.userVerified = true;
-                    this.saveUserToStorage(user);
-                    console.log('✅ User authenticated and registered');
-                    return user;
-                } else {
-                    console.log('❌ User not registered');
-                    await this.signOut();
-                    return null;
-                }
+                await this.handleSignedIn(user);
+                return user;
             }
             
             console.log('👤 No user found');
@@ -205,6 +146,7 @@ class AuthService {
                 };
             }
             
+            // ثبت‌نام کاربر
             const { data, error } = await this.supabase.auth.signUp({
                 email,
                 password,
@@ -212,8 +154,7 @@ class AuthService {
                     data: {
                         full_name: fullName,
                         referral_code: referralCode
-                    },
-                    emailRedirectTo: window.location.origin
+                    }
                 }
             });
             
@@ -227,8 +168,8 @@ class AuthService {
             
             console.log('✅ Sign up successful');
             
-            // اگر کاربر بلافاصله تأیید شد
-            if (data.user && (data.user.email_confirmed_at || data.session)) {
+            // اگر کاربر بلافاصله تأیید شد (در بعضی تنظیمات)
+            if (data.user) {
                 await this.handleSignedIn(data.user);
                 return { 
                     success: true, 
@@ -248,52 +189,6 @@ class AuthService {
             return { 
                 success: false, 
                 error: 'خطای غیرمنتظره در ثبت‌نام' 
-            };
-        }
-    }
-    
-    async signIn(email, password) {
-        try {
-            console.log('🔑 Signing in:', email);
-            
-            const { data, error } = await this.supabase.auth.signInWithPassword({
-                email,
-                password
-            });
-            
-            if (error) {
-                console.error('❌ Sign in error:', error);
-                return { 
-                    success: false, 
-                    error: this.getErrorMessage(error) 
-                };
-            }
-            
-            console.log('✅ Sign in successful');
-            
-            // بررسی ثبت‌نام کاربر
-            const isRegistered = await this.checkUserRegistration(data.user);
-            
-            if (!isRegistered) {
-                await this.signOut();
-                return { 
-                    success: false, 
-                    error: 'شما ثبت‌نام نکرده‌اید. لطفاً ابتدا ثبت‌نام کنید.'
-                };
-            }
-            
-            await this.handleSignedIn(data.user);
-            
-            return { 
-                success: true, 
-                data,
-                message: 'ورود موفقیت‌آمیز بود!'
-            };
-        } catch (error) {
-            console.error('🚨 Sign in exception:', error);
-            return { 
-                success: false, 
-                error: 'خطای غیرمنتظره در ورود' 
             };
         }
     }
@@ -323,11 +218,7 @@ class AuthService {
     }
     
     getCurrentUser() {
-        return this.userVerified ? this.currentUser : null;
-    }
-    
-    isUserVerified() {
-        return this.userVerified;
+        return this.currentUser;
     }
     
     isValidEmail(email) {
@@ -342,31 +233,10 @@ class AuthService {
             'Email not confirmed': 'لطفاً ایمیل خود را تأیید کنید.',
             'Weak password': 'رمز عبور بسیار ضعیف است.',
             'Auth session missing': 'لطفاً دوباره وارد شوید.',
-            'Network error': 'خطای شبکه. لطفاً اتصال اینترنت را بررسی کنید.',
-            'User not found': 'کاربری با این ایمیل پیدا نشد.',
-            'Invalid email': 'ایمیل نامعتبر است.'
+            'Network error': 'خطای شبکه. لطفاً اتصال اینترنت را بررسی کنید.'
         };
         
         return errorMessages[error.message] || error.message || 'خطای نامشخص';
-    }
-    
-    // تابع برای چک کردن وضعیت ایمیل تأیید
-    async checkEmailConfirmation() {
-        if (!this.currentUser) return false;
-        
-        try {
-            const { data: { user }, error } = await this.supabase.auth.getUser();
-            
-            if (error) {
-                console.error('❌ Error checking email confirmation:', error);
-                return false;
-            }
-            
-            return !!(user?.email_confirmed_at || user?.confirmed_at);
-        } catch (error) {
-            console.error('🚨 Error in checkEmailConfirmation:', error);
-            return false;
-        }
     }
 }
 
