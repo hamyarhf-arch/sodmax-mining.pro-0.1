@@ -1063,11 +1063,22 @@
                 </button>
 
                 <div style="text-align: center; margin-top: 20px; color: var(--text-secondary); font-size: 12px;">
-                    با ثبت نام، <a href="#" onclick="showTerms()" style="color: var(--primary-light);">قوانین و شرایط</a> را می‌پذیرید
-                </div>
-            </form>
+    با ثبت‌نام، 
+    <a href="#" onclick="window.uiService.showTerms()" style="color: var(--primary-light); text-decoration: none;">
+        قوانین و شرایط
+    </a> 
+    را می‌پذیرید
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--glass-border);">
+        <div style="font-size: 11px; margin-bottom: 8px;">
+            <i class="fas fa-info-circle"></i>
+            رمز عبور به ایمیل شما ارسال می‌شود
         </div>
+        <a href="#" id="loginLink" style="color: var(--secondary); font-size: 11px; text-decoration: none;">
+            <i class="fas fa-sign-in-alt"></i>
+            قبلاً ثبت‌نام کرده‌اید؟ اینجا کلیک کنید
+        </a>
     </div>
+</div>
 
     <!-- کانتینر اصلی -->
     <div class="container" id="mainContainer" style="display: none;">
@@ -1785,4 +1796,5 @@
     <script src="js/ui.js"></script>
 </body>
 </html>
+
 
