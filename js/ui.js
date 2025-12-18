@@ -35,11 +35,17 @@ class UIService {
         console.log('👋 Welcome:', user.email);
         
         // مخفی کردن صفحه لاگین
-        document.getElementById('registerOverlay').style.display = 'none';
-        document.getElementById('mainContainer').style.display = 'block';
+        const registerOverlay = document.getElementById('registerOverlay');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        if (registerOverlay) registerOverlay.style.display = 'none';
+        if (mainContainer) mainContainer.style.display = 'block';
         
         // نمایش اطلاعات کاربر
-        document.getElementById('userEmail').textContent = user.email;
+        const userEmailElement = document.getElementById('userEmail');
+        if (userEmailElement) {
+            userEmailElement.textContent = user.email;
+        }
         
         // مقداردهی اولیه بازی
         await this.gameService.initialize(user.id);
@@ -52,8 +58,11 @@ class UIService {
     }
     
     showLogin() {
-        document.getElementById('registerOverlay').style.display = 'flex';
-        document.getElementById('mainContainer').style.display = 'none';
+        const registerOverlay = document.getElementById('registerOverlay');
+        const mainContainer = document.getElementById('mainContainer');
+        
+        if (registerOverlay) registerOverlay.style.display = 'flex';
+        if (mainContainer) mainContainer.style.display = 'none';
     }
     
     bindEvents() {
@@ -82,16 +91,20 @@ class UIService {
         }
         
         // دکمه افزایش قدرت
-        const boostBtn = document.querySelector('button[onclick*="boostMining"]');
-        if (boostBtn) {
-            boostBtn.addEventListener('click', () => this.handleBoostMining());
-        }
+        const boostBtns = document.querySelectorAll('button');
+        boostBtns.forEach(btn => {
+            if (btn.textContent.includes('افزایش قدرت') || btn.innerHTML.includes('fa-bolt')) {
+                btn.addEventListener('click', () => this.handleBoostMining());
+            }
+        });
         
         // دکمه خرید SOD
-        const buySodBtn = document.querySelector('button[onclick*="showSODSale"]');
-        if (buySodBtn) {
-            buySodBtn.addEventListener('click', () => this.showSODSale());
-        }
+        const buySodBtns = document.querySelectorAll('button');
+        buySodBtns.forEach(btn => {
+            if (btn.textContent.includes('خرید SOD') || btn.innerHTML.includes('fa-shopping-cart')) {
+                btn.addEventListener('click', () => this.showSODSale());
+            }
+        });
         
         console.log('✅ UI events bound');
     }
@@ -99,11 +112,20 @@ class UIService {
     async handleRegister(e) {
         e.preventDefault();
         
-        const fullName = document.getElementById('fullName').value.trim();
-        const email = document.getElementById('email').value.trim();
-        const referralCode = document.getElementById('referralCode').value.trim();
+        const fullName = document.getElementById('fullName');
+        const email = document.getElementById('email');
+        const referralCode = document.getElementById('referralCode');
         
         if (!fullName || !email) {
+            this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
+            return;
+        }
+        
+        const fullNameValue = fullName.value.trim();
+        const emailValue = email.value.trim();
+        const referralCodeValue = referralCode ? referralCode.value.trim() : '';
+        
+        if (!fullNameValue || !emailValue) {
             this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
             return;
         }
@@ -113,14 +135,14 @@ class UIService {
         
         this.showNotification('⏳', 'در حال ثبت نام...');
         
-        const result = await this.authService.signUp(email, password, fullName, referralCode);
+        const result = await this.authService.signUp(emailValue, password, fullNameValue, referralCodeValue);
         
         if (result.success) {
             this.showNotification('✅', 'ثبت نام موفق! اکنون وارد شوید.');
             
             // تلاش برای ورود خودکار
             setTimeout(async () => {
-                const loginResult = await this.authService.signIn(email, password);
+                const loginResult = await this.authService.signIn(emailValue, password);
                 if (loginResult.success) {
                     this.showMainApp(loginResult.data.user);
                 }
@@ -201,13 +223,17 @@ class UIService {
         
         if (gameData.autoMining) {
             this.gameService.stopAutoMining();
-            autoMineBtn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
-            autoMineBtn.style.background = '';
+            if (autoMineBtn) {
+                autoMineBtn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
+                autoMineBtn.style.background = '';
+            }
             this.showNotification('⏸️', 'استخراج خودکار متوقف شد.');
         } else {
             this.gameService.startAutoMining();
-            autoMineBtn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
-            autoMineBtn.style.background = 'var(--error)';
+            if (autoMineBtn) {
+                autoMineBtn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
+                autoMineBtn.style.background = 'var(--error)';
+            }
             this.showNotification('🤖', 'استخراج خودکار فعال شد.');
         }
         
@@ -219,21 +245,38 @@ class UIService {
         const format = this.gameService.formatNumber.bind(this.gameService);
         
         // موجودی‌ها
-        document.getElementById('sodBalance').innerHTML = format(gameData.sodBalance) + ' <span>SOD</span>';
-        document.getElementById('usdtBalance').innerHTML = gameData.usdtBalance.toFixed(4) + ' <span>USDT</span>';
+        const sodBalance = document.getElementById('sodBalance');
+        const usdtBalance = document.getElementById('usdtBalance');
+        
+        if (sodBalance) {
+            sodBalance.innerHTML = format(gameData.sodBalance) + ' <span>SOD</span>';
+        }
+        
+        if (usdtBalance) {
+            usdtBalance.innerHTML = gameData.usdtBalance.toFixed(4) + ' <span>USDT</span>';
+        }
         
         // آمار
-        document.getElementById('todayEarnings').textContent = format(gameData.todayEarnings) + ' SOD';
-        document.getElementById('miningPower').textContent = gameData.miningPower + 'x';
-        document.getElementById('clickReward').textContent = '+' + gameData.miningPower + ' SOD';
-        document.getElementById('userLevel').textContent = gameData.userLevel;
+        const todayEarnings = document.getElementById('todayEarnings');
+        const miningPower = document.getElementById('miningPower');
+        const clickReward = document.getElementById('clickReward');
+        const userLevel = document.getElementById('userLevel');
+        
+        if (todayEarnings) todayEarnings.textContent = format(gameData.todayEarnings) + ' SOD';
+        if (miningPower) miningPower.textContent = gameData.miningPower + 'x';
+        if (clickReward) clickReward.textContent = '+' + gameData.miningPower + ' SOD';
+        if (userLevel) userLevel.textContent = gameData.userLevel;
         
         // پاداش USDT
-        document.getElementById('availableUSDT').textContent = gameData.usdtBalance.toFixed(4) + ' USDT';
+        const availableUSDT = document.getElementById('availableUSDT');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        
+        if (availableUSDT) availableUSDT.textContent = gameData.usdtBalance.toFixed(4) + ' USDT';
         
         const progressPercent = (gameData.usdtProgress / 10000000) * 100;
-        document.getElementById('progressFill').style.width = progressPercent + '%';
-        document.getElementById('progressText').textContent = format(gameData.usdtProgress) + ' / ۱۰,۰۰۰,۰۰۰ SOD (۰.۰۱ USDT)';
+        if (progressFill) progressFill.style.width = progressPercent + '%';
+        if (progressText) progressText.textContent = format(gameData.usdtProgress) + ' / ۱۰,۰۰۰,۰۰۰ SOD (۰.۰۱ USDT)';
         
         // آپدیت دکمه استخراج خودکار
         const autoMineBtn = document.getElementById('autoMineBtn');
@@ -262,6 +305,8 @@ class UIService {
         `;
         
         const core = document.getElementById('minerCore');
+        if (!core) return;
+        
         const rect = core.getBoundingClientRect();
         effect.style.left = rect.left + rect.width / 2 + 'px';
         effect.style.top = rect.top + rect.height / 2 + 'px';
@@ -291,6 +336,11 @@ class UIService {
     
     async loadSalePlans() {
         try {
+            if (!this.supabaseService || !this.supabaseService.getSalePlans) {
+                console.error('❌ supabaseService not available');
+                return;
+            }
+            
             const plans = await this.supabaseService.getSalePlans();
             const grid = document.getElementById('salePlansGrid');
             
@@ -318,7 +368,7 @@ class UIService {
                         ${plan.features.map(feature => `<li><i class="fas fa-check" style="color: var(--success);"></i> ${feature}</li>`).join('')}
                     </ul>
                     
-                    <button class="btn ${plan.popular ? 'btn-warning' : 'btn-primary'}" onclick="uiService.handleBuyPlan(${plan.id})">
+                    <button class="btn ${plan.popular ? 'btn-warning' : 'btn-primary'}" onclick="window.uiService.handleBuyPlan(${plan.id})">
                         <i class="fas fa-shopping-cart"></i>
                         خرید پنل
                     </button>
@@ -384,8 +434,11 @@ class UIService {
     }
     
     showSODSale() {
-        document.getElementById('sodSaleSection').style.display = 'block';
-        document.getElementById('sodSaleSection').scrollIntoView({ 
+        const sodSaleSection = document.getElementById('sodSaleSection');
+        if (!sodSaleSection) return;
+        
+        sodSaleSection.style.display = 'block';
+        sodSaleSection.scrollIntoView({ 
             behavior: 'smooth',
             block: 'start'
         });
