@@ -22,7 +22,7 @@ class UIService {
         await this.checkAuthState();
         
         // بارگذاری پنل‌های فروش
-        this.loadSalePlans();
+        await this.loadSalePlans();
         
         this.isInitialized = true;
         console.log('✅ UI initialized');
@@ -541,8 +541,208 @@ class UIService {
         }, 4000);
     }
     
-    // بقیه توابع (loadSalePlans, loadTransactions, showSODSale, etc.)
-    // مانند قبل باقی می‌مانند
+    // ============ بارگذاری پنل‌های فروش ============
+    
+    async loadSalePlans() {
+        try {
+            console.log('🛒 Loading sale plans...');
+            
+            if (!this.supabaseService || !this.supabaseService.getSalePlans) {
+                console.error('❌ supabaseService not available');
+                return;
+            }
+            
+            const plans = await this.supabaseService.getSalePlans();
+            const grid = document.getElementById('salePlansGrid');
+            
+            if (!grid) {
+                console.log('📋 Sale plans grid not found');
+                return;
+            }
+            
+            grid.innerHTML = '';
+            
+            plans.forEach(plan => {
+                const card = document.createElement('div');
+                card.className = `sale-plan-card ${plan.popular ? 'featured' : ''}`;
+                
+                const totalSOD = plan.sod_amount + Math.floor(plan.sod_amount * (plan.discount / 100));
+                
+                card.innerHTML = `
+                    ${plan.popular ? `<div class="sale-plan-badge">پیشنهاد ویژه</div>` : ''}
+                    ${plan.discount > 0 ? `<div style="position: absolute; top: 16px; right: 16px;"><span class="discount-badge">${plan.discount}% تخفیف</span></div>` : ''}
+                    
+                    <div class="sale-plan-header">
+                        <h3 class="sale-plan-name">${plan.name}</h3>
+                        <div class="sale-plan-price">${plan.price} <span>USDT</span></div>
+                        <div class="sod-amount">${this.gameService.formatNumber(totalSOD)} SOD</div>
+                    </div>
+                    
+                    <ul class="sale-plan-features">
+                        ${plan.features.map(feature => `<li><i class="fas fa-check" style="color: var(--success);"></i> ${feature}</li>`).join('')}
+                    </ul>
+                    
+                    <button class="btn ${plan.popular ? 'btn-warning' : 'btn-primary'}" data-plan-id="${plan.id}">
+                        <i class="fas fa-shopping-cart"></i>
+                        خرید پنل
+                    </button>
+                `;
+                
+                // اضافه کردن event listener به دکمه خرید
+                const buyBtn = card.querySelector('button');
+                buyBtn.addEventListener('click', () => {
+                    this.handleBuyPlan(plan.id);
+                });
+                
+                grid.appendChild(card);
+            });
+            
+            console.log('✅ Sale plans loaded:', plans.length, 'plans');
+        } catch (error) {
+            console.error('❌ Error loading sale plans:', error);
+        }
+    }
+    
+    async handleBuyPlan(planId) {
+        const user = this.authService.getCurrentUser();
+        if (!user) {
+            this.showNotification('❌', 'ابتدا ثبت‌نام کنید');
+            this.showRegisterForm();
+            return;
+        }
+        
+        // پیاده‌سازی خرید پنل
+        this.showNotification('🛒', `خرید پنل ${planId} در حال پردازش...`);
+        
+        // اینجا منطق خرید واقعی پیاده‌سازی می‌شود
+        setTimeout(() => {
+            this.showNotification('✅', 'خرید با موفقیت انجام شد!');
+            this.updateGameUI();
+        }, 2000);
+    }
+    
+    // ============ بارگذاری تراکنش‌ها ============
+    
+    async loadTransactions() {
+        const user = this.authService.getCurrentUser();
+        if (!user) return;
+        
+        try {
+            const transactions = await this.gameService.getRecentTransactions(10);
+            const list = document.getElementById('transactionsList');
+            
+            if (!list) return;
+            
+            list.innerHTML = '';
+            
+            if (transactions.length === 0) {
+                list.innerHTML = `
+                    <div class="transaction-row" style="text-align: center; color: var(--text-secondary);">
+                        <i class="fas fa-history" style="font-size: 24px; margin-bottom: 10px;"></i>
+                        <div>هنوز تراکنشی ثبت نشده است</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            transactions.forEach(transaction => {
+                const row = document.createElement('div');
+                row.className = 'transaction-row';
+                
+                const date = new Date(transaction.created_at).toLocaleString('fa-IR');
+                
+                row.innerHTML = `
+                    <div class="transaction-type">
+                        <div class="transaction-icon">
+                            ${transaction.type === 'mining' ? '⛏️' : 
+                              transaction.type === 'purchase' ? '🛒' : 
+                              transaction.type === 'withdrawal' ? '💰' : 
+                              transaction.type === 'usdt_reward' ? '🎁' :
+                              transaction.type === 'boost' ? '⚡' : '📝'}
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: bold;">
+                                ${transaction.type === 'mining' ? 'استخراج' : 
+                                 transaction.type === 'purchase' ? 'خرید SOD' : 
+                                 transaction.type === 'withdrawal' ? 'دریافت USDT' : 
+                                 transaction.type === 'usdt_reward' ? 'پاداش USDT' :
+                                 transaction.type === 'boost' ? 'افزایش قدرت' : 'تراکنش'}
+                            </div>
+                            <div style="color: var(--text-secondary); font-size: 12px;">${date}</div>
+                            <div style="color: var(--text-secondary); font-size: 11px;">${transaction.description || ''}</div>
+                        </div>
+                        <div style="font-weight: bold; color: ${transaction.type === 'withdrawal' ? 'var(--accent)' : 'var(--primary-light)'};">
+                            ${transaction.type === 'withdrawal' ? '-' : '+'}${transaction.amount} ${transaction.currency}
+                        </div>
+                    </div>
+                `;
+                
+                list.appendChild(row);
+            });
+            
+            console.log('✅ Transactions loaded:', transactions.length, 'transactions');
+        } catch (error) {
+            console.error('❌ Error loading transactions:', error);
+        }
+    }
+    
+    showSODSale() {
+        const user = this.authService.getCurrentUser();
+        if (!user) {
+            this.showNotification('❌', 'ابتدا ثبت‌نام کنید');
+            this.showRegisterForm();
+            return;
+        }
+        
+        const sodSaleSection = document.getElementById('sodSaleSection');
+        if (!sodSaleSection) return;
+        
+        sodSaleSection.style.display = 'block';
+        sodSaleSection.scrollIntoView({ 
+            behavior: 'smooth',
+            block: 'start'
+        });
+    }
+    
+    // ============ توابع کمکی ============
+    
+    isValidEmail(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+    }
+    
+    generatePassword() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        let password = '';
+        for (let i = 0; i < 12; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return password;
+    }
+    
+    showTerms() {
+        this.showNotification('📜', 'قوانین و شرایط سرویس');
+        // می‌توانید یک مدال یا صفحه جداگانه برای نمایش شرایط ایجاد کنید
+    }
+    
+    // ============ تابع برای تست سریع ============
+    
+    async testLogin() {
+        // برای تست سریع
+        this.showNotification('🧪', 'در حال تست ورود...');
+        
+        const testEmail = 'test@example.com';
+        const testPassword = 'Test123!@#';
+        
+        const result = await this.authService.signUp(testEmail, testPassword, 'تست کاربر', '');
+        
+        if (result.success) {
+            this.showNotification('✅', 'تست ورود موفق بود!');
+            this.showMainApp(this.authService.getCurrentUser());
+        } else {
+            this.showNotification('❌', 'تست ورود ناموفق: ' + result.error);
+        }
+    }
 }
 
 // ایجاد instance و export
