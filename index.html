@@ -1789,20 +1789,28 @@
     
     <!-- Supabase Integration -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <!-- قبل از بسته شدن تگ </body> -->
+<!-- قبل از بسته شدن تگ </body> این کدها را جایگزین کن -->
 <script type="module" src="./supabase.js"></script>
-<script type="module" src="./auth.js"></script>
-<script type="module" src="./game.js"></script>
-<script type="module" src="./ui.js"></script>
 <script type="module">
-    // Start the application
+    import { AuthService } from './auth.js';
+    import { GameService } from './game.js';
+    import { UIService } from './ui.js';
+    
+    // وقتی DOM کامل لود شد
     document.addEventListener('DOMContentLoaded', () => {
-        console.log('🚀 Starting application...');
+        console.log('🚀 SODmAX Pro starting...');
+        
+        // Initialize services
+        window.authService = new AuthService();
+        window.gameService = new GameService();
         window.uiService = new UIService();
+        
+        console.log('🎉 All services initialized!');
     });
 </script>
 </body>
 </html>
+
 
 
 
