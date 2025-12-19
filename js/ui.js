@@ -97,7 +97,11 @@ async handleLogin(e) {
         
         // بایند کردن events
         this.bindEvents();
-        
+        const loginForm = document.getElementById('loginForm');
+if (loginForm) {
+    loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+    console.log('✅ Login form bound');
+}
         // چک کردن وضعیت auth
         await this.checkAuthState();
         
