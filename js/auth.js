@@ -286,6 +286,68 @@ class AuthService {
 }
 
 // Create global instance
+// تابع تنظیم دکمه خروج
+function setupLogoutButton() {
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            
+            if (confirm('آیا مطمئن هستید که می‌خواهید از حساب خود خارج شوید؟')) {
+                await logout();
+            }
+        });
+    }
+}
+
+// تابع خروج
+async function logout() {
+    try {
+        console.log('🚪 Logging out user:', currentUser?.email);
+        
+        // 1. پاک کردن localStorage
+        Object.keys(localStorage).forEach(key => {
+            if (key.includes('sodmax') || key.includes('supabase')) {
+                localStorage.removeItem(key);
+            }
+        });
+        
+        // 2. پاک کردن sessionStorage
+        sessionStorage.clear();
+        
+        // 3. ریست متغیرها
+        currentUser = null;
+        gameData = null;
+        
+        // 4. نمایش نوتیفیکیشن
+        showNotification('👋', 'با موفقیت خارج شدید', 'success');
+        
+        // 5. نمایش فرم ثبت‌نام
+        showRegisterOverlay();
+        
+        // 6. ریفرش صفحه بعد از 1 ثانیه
+        setTimeout(() => {
+            location.reload();
+        }, 1000);
+        
+        return true;
+    } catch (error) {
+        console.error('🚨 Error logging out:', error);
+        showNotification('خطا', 'خطا در خروج از حساب', 'error');
+        return false;
+    }
+}
+
+// اضافه کردن logout به authService
+authService.logout = logout;
+authService.setupLogoutButton = setupLogoutButton;
+
+// فراخوانی setupLogoutButton وقتی DOM بارگذاری شد
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        setupLogoutButton();
+    }, 1000);
+});
 window.authService = new AuthService();
 console.log('✅ Auth service loaded');
 
