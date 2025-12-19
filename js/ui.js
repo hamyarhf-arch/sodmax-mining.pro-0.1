@@ -130,17 +130,8 @@ class UIService {
         if (mainContainer) {
             mainContainer.style.display = 'block';
             
-            // نمایش اطلاعات کاربر
-            const userEmailElement = document.getElementById('userEmail');
-            if (userEmailElement) {
-                userEmailElement.textContent = user.email;
-            }
-            
-            // نمایش نام کاربر
-            const userNameElement = document.getElementById('userName');
-            if (userNameElement) {
-                userNameElement.textContent = user.user_metadata?.full_name || user.email.split('@')[0];
-            }
+            // آپدیت پروفایل کاربر
+            await this.updateUserProfile();
             
             // مقداردهی اولیه بازی
             if (this.gameService && this.gameService.initialize) {
@@ -633,7 +624,7 @@ class UIService {
     }
     
     generatePassword() {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklopqrstuvwxyz0123456789!@#$%^&*';
         let password = '';
         for (let i = 0; i < 12; i++) {
             password += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -738,6 +729,87 @@ class UIService {
                 autoMineBtn.classList.remove('btn-warning');
                 autoMineBtn.classList.add('btn-primary');
             }
+        }
+    }
+    
+    // ============ تابع چک کردن وضعیت ادمین ============
+    async checkAdminStatus() {
+        try {
+            const user = this.authService ? this.authService.getCurrentUser() : null;
+            if (!user) {
+                console.log('👤 No user logged in');
+                return false;
+            }
+            
+            console.log('🔍 Checking admin status for:', user.email);
+            
+            // لیست ادمین‌ها
+            const adminEmails = [
+                'hamyarhf@gmail.com',      // ادمین اصلی
+                'admin@sodmax.com',        // ادمین دوم
+                'test@admin.com'           // ادمین تست
+            ];
+            
+            // چک کردن ایمیل کاربر
+            const userEmail = user.email.toLowerCase().trim();
+            const isAdmin = adminEmails.includes(userEmail);
+            
+            console.log('👑 Admin status:', isAdmin ? 'ADMIN' : 'USER');
+            
+            // نمایش یا مخفی کردن لینک ادمین
+            const adminLink = document.getElementById('adminLink');
+            if (adminLink) {
+                if (isAdmin) {
+                    adminLink.style.display = 'flex';
+                    adminLink.style.background = 'rgba(255, 107, 53, 0.3)';
+                    adminLink.innerHTML = `
+                        <i class="fas fa-user-shield"></i>
+                        <span class="nav-text">مدیریت</span>
+                    `;
+                } else {
+                    adminLink.style.display = 'none';
+                }
+            }
+            
+            return isAdmin;
+        } catch (error) {
+            console.error('❌ Error in checkAdminStatus:', error);
+            return false;
+        }
+    }
+    
+    // ============ تابع آپدیت پروفایل کاربر ============
+    async updateUserProfile() {
+        try {
+            const user = this.authService ? this.authService.getCurrentUser() : null;
+            if (!user) return;
+            
+            // چک کردن وضعیت ادمین
+            const isAdmin = await this.checkAdminStatus();
+            
+            // نمایش نام کاربر با نشان ادمین
+            const userNameElement = document.getElementById('userName');
+            if (userNameElement) {
+                const adminBadge = isAdmin ? '<span class="admin-badge">👑 ادمین</span> ' : '';
+                userNameElement.innerHTML = adminBadge + (user.user_metadata?.full_name || user.email.split('@')[0]);
+            }
+            
+            // نمایش ایمیل کاربر
+            const userEmailElement = document.getElementById('userEmail');
+            if (userEmailElement) {
+                userEmailElement.textContent = user.email;
+            }
+            
+            // نمایش سطح کاربر
+            if (this.gameService) {
+                const gameData = this.gameService.getGameData();
+                const userLevelElement = document.getElementById('userLevel');
+                if (userLevelElement) {
+                    userLevelElement.textContent = gameData.userLevel;
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error in updateUserProfile:', error);
         }
     }
     
@@ -1098,83 +1170,3 @@ console.log('✅ UI service instance created');
 document.addEventListener('DOMContentLoaded', () => {
     console.log('📄 DOM loaded, UI service ready');
 });
-// در فایل ui.js، این تابع را اضافه کنید یا اگر وجود دارد، اصلاح کنید:
-async checkAdminStatus() {
-    const user = this.authService ? this.authService.getCurrentUser() : null;
-    if (!user) return false;
-    
-    console.log('🔍 Checking admin status for:', user.email);
-    
-    // لیست ادمین‌ها - می‌توانید از دیتابیس بخوانید یا ثابت تعریف کنید
-    const adminEmails = [
-        'hamyarhf@gmail.com',      // ادمین اصلی
-        'admin@sodmax.com',        // ادمین دوم
-        'test@admin.com'           // ادمین تست
-    ];
-    
-    // چک کنید آیا ایمیل کاربر در لیست ادمین‌ها است
-    const isAdmin = adminEmails.includes(user.email.toLowerCase());
-    
-    console.log('👑 Admin status:', isAdmin ? 'ADMIN' : 'USER');
-    
-    // نمایش/مخفی کردن لینک ادمین
-    const adminLink = document.getElementById('adminLink');
-    if (adminLink) {
-        adminLink.style.display = isAdmin ? 'flex' : 'none';
-        
-        // اگر ادمین است، استایل متفاوتی بده
-        if (isAdmin) {
-            adminLink.style.background = 'rgba(255, 107, 53, 0.3)'; // رنگ نارنجی برای ادمین
-            adminLink.innerHTML = `
-                <i class="fas fa-user-shield"></i>
-                <span class="nav-text">مدیریت</span>
-            `;
-        }
-    }
-    
-    return isAdmin;
-}
-
-// سپس در تابع showMainApp، این تابع را فراخوانی کنید:
-async showMainApp(user) {
-    console.log('🚀 Showing main app for:', user.email);
-    
-    // مخفی کردن صفحه ثبت‌نام/ورود
-    const registerOverlay = document.getElementById('registerOverlay');
-    const mainContainer = document.getElementById('mainContainer');
-    
-    if (registerOverlay) {
-        registerOverlay.style.display = 'none';
-    }
-    
-    if (mainContainer) {
-        mainContainer.style.display = 'block';
-        
-        // آپدیت پروفایل کاربر
-        this.updateUserProfile();
-        
-        // چک کردن وضعیت ادمین
-        await this.checkAdminStatus();
-        
-        // مقداردهی اولیه بازی
-        if (this.gameService && this.gameService.initialize) {
-            try {
-                await this.gameService.initialize(user.id);
-            } catch (error) {
-                console.error('❌ Error initializing game:', error);
-                this.showNotification('⚠️', 'خطا در بارگذاری داده‌های بازی');
-            }
-        }
-        
-        // آپدیت UI
-        this.updateGameUI();
-        
-        // بارگذاری تراکنش‌ها
-        this.loadTransactions();
-        
-        // نمایش پیام خوش‌آمد
-        setTimeout(() => {
-            this.showNotification('🌟', `خوش آمدید ${user.user_metadata?.full_name || 'کاربر'}!`);
-        }, 500);
-    }
-}
