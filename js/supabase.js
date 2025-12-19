@@ -27,10 +27,11 @@ async function getUserFromDB(email) {
 }
 
 // 2. ایجاد کاربر جدید در دیتابیس
+// js/supabase.js - نسخه اصلاح شده تابع createUserInDB
 async function createUserInDB(userData) {
     try {
         const newUser = {
-            id: userData.id,
+            id: userData.id, // این ID از Supabase Auth می‌آید
             email: userData.email,
             full_name: userData.fullName || userData.email.split('@')[0],
             sod_balance: 1000000,
@@ -44,16 +45,18 @@ async function createUserInDB(userData) {
             created_at: new Date().toISOString()
         };
         
+        // به جای insert از upsert استفاده کنید
         const { data, error } = await window.supabaseClient
             .from('users')
-            .insert([newUser])
+            .upsert(newUser, { onConflict: 'id' }) // اگر id تکراری بود، آپدیت کن
             .select()
             .single();
         
         if (error) throw error;
+        console.log('✅ User upserted in database:', data.id);
         return data;
     } catch (error) {
-        console.error('❌ Error creating user:', error.message);
+        console.error('❌ Error upserting user:', error.message);
         return null;
     }
 }
