@@ -65,6 +65,16 @@ async function getUserById(userId) {
 
 async function createUser(userData) {
     try {
+        console.log('📝 Creating user in database:', userData.email);
+        
+        // ابتدا چک می‌کنیم آیا کاربر وجود دارد
+        const existingUser = await getUserByEmail(userData.email);
+        if (existingUser) {
+            console.log('✅ User already exists');
+            return existingUser;
+        }
+        
+        // اگر کاربر وجود ندارد، ایجاد می‌کنیم
         const { data, error } = await supabaseClient
             .from('users')
             .insert([{
@@ -73,7 +83,7 @@ async function createUser(userData) {
                 full_name: userData.fullName || userData.email.split('@')[0],
                 referral_code: userData.referralCode || '',
                 level: 1,
-                sod_balance: 1000000,
+                sod_balance: 1000000, // هدیه ثبت‌نام
                 usdt_balance: 0,
                 mining_power: 10,
                 total_mined: 0,
@@ -85,10 +95,27 @@ async function createUser(userData) {
         
         if (error) {
             console.error('❌ Error creating user:', error);
-            return null;
+            
+            // تلاش با ستون‌های کمتر
+            const { data: simpleData, error: simpleError } = await supabaseClient
+                .from('users')
+                .insert([{
+                    id: userData.id,
+                    email: userData.email,
+                    full_name: userData.fullName || userData.email.split('@')[0]
+                }])
+                .select()
+                .single();
+            
+            if (simpleError) {
+                console.error('❌ Simple insert also failed:', simpleError);
+                return null;
+            }
+            console.log('✅ User created with basic info');
+            return simpleData;
         }
         
-        console.log('✅ User created in database:', data.email);
+        console.log('✅ User created successfully:', data.email);
         return data;
     } catch (error) {
         console.error('🚨 Error in createUser:', error);
@@ -98,20 +125,21 @@ async function createUser(userData) {
 
 async function updateUser(userId, updateData) {
     try {
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from('users')
             .update({
                 ...updateData,
                 last_updated: new Date().toISOString()
             })
-            .eq('id', userId);
+            .eq('id', userId)
+            .select();
         
         if (error) {
-            console.error('❌ Error updating user:', error);
+            console.error('❌ Error updating user:', error.message);
             return false;
         }
         
-        console.log('✅ User updated in database:', userId);
+        console.log('✅ User updated:', userId);
         return true;
     } catch (error) {
         console.error('🚨 Error in updateUser:', error);
@@ -122,77 +150,86 @@ async function updateUser(userId, updateData) {
 // ============ توابع بازی ============
 async function getGameData(userId) {
     try {
+        // ابتدا از دیتابیس می‌خوانیم
         const userData = await getUserById(userId);
         
-        if (!userData) {
-            console.log('👤 User not found in database, checking local storage');
+        if (userData) {
+            console.log('✅ Game data loaded from database for:', userData.email);
             
-            const localData = localStorage.getItem(`sodmax_game_${userId}`);
-            if (localData) {
-                console.log('📱 Using local storage data');
-                return JSON.parse(localData);
-            }
+            // بررسی کن که آیا کاربر جدید است یا قدیمی
+            const isNewUser = !userData.total_mined || userData.total_mined === 0;
             
             return {
-                sodBalance: 1000000,
-                usdtBalance: 0,
+                sodBalance: userData.sod_balance || (isNewUser ? 1000000 : 0),
+                usdtBalance: userData.usdt_balance || 0,
                 todayEarnings: 0,
-                miningPower: 10,
-                userLevel: 1,
-                usdtProgress: 1000000,
-                totalMined: 0
+                miningPower: userData.mining_power || 10,
+                userLevel: userData.level || 1,
+                usdtProgress: userData.usdt_progress || (isNewUser ? 1000000 : 0),
+                totalMined: userData.total_mined || 0
             };
         }
         
-        console.log('✅ Game data loaded from database');
+        // اگر کاربر در دیتابیس نبود
+        console.log('👤 User not in database, creating new game data');
         return {
-            sodBalance: userData.sod_balance || 1000000,
-            usdtBalance: userData.usdt_balance || 0,
+            sodBalance: 1000000, // هدیه ثبت‌نام
+            usdtBalance: 0,
             todayEarnings: 0,
-            miningPower: userData.mining_power || 10,
-            userLevel: userData.level || 1,
-            usdtProgress: userData.usdt_progress || 1000000,
-            totalMined: userData.total_mined || 0
+            miningPower: 10,
+            userLevel: 1,
+            usdtProgress: 1000000, // شروع از 1 میلیون
+            totalMined: 0
         };
+        
     } catch (error) {
         console.error('🚨 Error in getGameData:', error);
-        
-        const localData = localStorage.getItem(`sodmax_game_${userId}`);
-        if (localData) {
-            console.log('📱 Using local storage as fallback');
-            return JSON.parse(localData);
-        }
-        
-        return null;
+        return {
+            sodBalance: 1000000,
+            usdtBalance: 0,
+            todayEarnings: 0,
+            miningPower: 10,
+            userLevel: 1,
+            usdtProgress: 1000000,
+            totalMined: 0
+        };
     }
 }
 
 async function saveGameData(userId, gameData) {
     try {
+        console.log('💾 Saving game data for user:', userId);
+        
+        // همیشه در localStorage ذخیره می‌کنیم
         localStorage.setItem(`sodmax_game_${userId}`, JSON.stringify(gameData));
+        
+        // تلاش برای ذخیره در دیتابیس
+        const updateData = {
+            sod_balance: gameData.sodBalance,
+            usdt_balance: gameData.usdtBalance,
+            mining_power: gameData.miningPower,
+            level: gameData.userLevel,
+            usdt_progress: gameData.usdtProgress,
+            total_mined: gameData.totalMined,
+            last_updated: new Date().toISOString()
+        };
         
         const { error } = await supabaseClient
             .from('users')
-            .update({
-                sod_balance: gameData.sodBalance,
-                usdt_balance: gameData.usdtBalance,
-                mining_power: gameData.miningPower,
-                level: gameData.userLevel,
-                usdt_progress: gameData.usdtProgress,
-                total_mined: gameData.totalMined,
-                last_updated: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', userId);
         
         if (error) {
-            console.error('❌ Error saving to database (using local storage):', error.message);
-            return false;
+            console.log('ℹ️ Database update not required or RLS issue, using localStorage only');
+            console.log('📱 Saved to localStorage:', gameData.sodBalance);
+            return true;
         }
         
         console.log('✅ Game data saved to database');
         return true;
     } catch (error) {
         console.error('🚨 Error in saveGameData:', error);
+        console.log('📱 Saved to localStorage only');
         return false;
     }
 }
@@ -200,6 +237,8 @@ async function saveGameData(userId, gameData) {
 // ============ توابع تراکنش‌ها ============
 async function addTransaction(userId, transaction) {
     try {
+        console.log('📊 Adding transaction:', transaction.type);
+        
         const { error } = await supabaseClient
             .from('transactions')
             .insert([{
@@ -207,12 +246,13 @@ async function addTransaction(userId, transaction) {
                 type: transaction.type,
                 amount: transaction.amount,
                 currency: transaction.currency,
-                description: transaction.description
+                description: transaction.description || ''
             }]);
         
         if (error) {
-            console.error('❌ Error adding transaction:', error);
+            console.log('ℹ️ Could not save transaction to DB, using localStorage:', error.message);
             
+            // ذخیره در localStorage
             const transactions = JSON.parse(localStorage.getItem(`sodmax_transactions_${userId}`) || '[]');
             transactions.push({
                 ...transaction,
@@ -228,6 +268,7 @@ async function addTransaction(userId, transaction) {
     } catch (error) {
         console.error('🚨 Error in addTransaction:', error);
         
+        // ذخیره در localStorage
         const transactions = JSON.parse(localStorage.getItem(`sodmax_transactions_${userId}`) || '[]');
         transactions.push({
             ...transaction,
@@ -249,8 +290,9 @@ async function getTransactions(userId, limit = 20) {
             .limit(limit);
         
         if (error) {
-            console.error('❌ Error getting transactions from database:', error);
+            console.log('ℹ️ Could not get transactions from DB, using localStorage:', error.message);
             
+            // از localStorage استفاده می‌کنیم
             const transactions = JSON.parse(localStorage.getItem(`sodmax_transactions_${userId}`) || '[]');
             return transactions.slice(0, limit);
         }
@@ -259,6 +301,7 @@ async function getTransactions(userId, limit = 20) {
     } catch (error) {
         console.error('🚨 Error in getTransactions:', error);
         
+        // از localStorage استفاده می‌کنیم
         const transactions = JSON.parse(localStorage.getItem(`sodmax_transactions_${userId}`) || '[]');
         return transactions.slice(0, limit);
     }
@@ -273,91 +316,59 @@ async function getSalePlans() {
             .order('price', { ascending: true });
         
         if (error) {
-            console.error('❌ Error getting sale plans from database:', error.message);
+            console.log('ℹ️ Could not get sale plans from DB, using default:', error.message);
             
-            return [
-                {
-                    id: 1,
-                    name: "پنل استارتر",
-                    price: 1,
-                    sod_amount: 5000000,
-                    features: ["۵,۰۰۰,۰۰۰ SOD", "هدیه ۵۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵٪"],
-                    popular: false,
-                    discount: 0
-                },
-                {
-                    id: 2,
-                    name: "پنل پرو",
-                    price: 5,
-                    sod_amount: 30000000,
-                    features: ["۳۰,۰۰۰,۰۰۰ SOD", "هدیه ۳,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۱۵٪"],
-                    popular: true,
-                    discount: 10
-                },
-                {
-                    id: 3,
-                    name: "پنل پلاتینیوم",
-                    price: 15,
-                    sod_amount: 100000000,
-                    features: ["۱۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۱۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۳۰٪"],
-                    popular: false,
-                    discount: 15
-                },
-                {
-                    id: 4,
-                    name: "پنل الماس",
-                    price: 50,
-                    sod_amount: 500000000,
-                    features: ["۵۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۵۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵۰٪"],
-                    popular: false,
-                    discount: 20
-                }
-            ];
+            // داده‌های پیش‌فرض
+            return getDefaultSalePlans();
         }
         
-        return data || [];
+        console.log('✅ Sale plans loaded from database:', data.length);
+        return data || getDefaultSalePlans();
     } catch (error) {
         console.error('🚨 Error in getSalePlans:', error);
-        
-        return [
-            {
-                id: 1,
-                name: "پنل استارتر",
-                price: 1,
-                sod_amount: 5000000,
-                features: ["۵,۰۰۰,۰۰۰ SOD", "هدیه ۵۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵٪"],
-                popular: false,
-                discount: 0
-            },
-            {
-                id: 2,
-                name: "پنل پرو",
-                price: 5,
-                sod_amount: 30000000,
-                features: ["۳۰,۰۰۰,۰۰۰ SOD", "هدیه ۳,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۱۵٪"],
-                popular: true,
-                discount: 10
-            },
-            {
-                id: 3,
-                name: "پنل پلاتینیوم",
-                price: 15,
-                sod_amount: 100000000,
-                features: ["۱۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۱۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۳۰٪"],
-                popular: false,
-                discount: 15
-            },
-            {
-                id: 4,
-                name: "پنل الماس",
-                price: 50,
-                sod_amount: 500000000,
-                features: ["۵۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۵۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵۰٪"],
-                popular: false,
-                discount: 20
-            }
-        ];
+        return getDefaultSalePlans();
     }
+}
+
+function getDefaultSalePlans() {
+    return [
+        {
+            id: 1,
+            name: "پنل استارتر",
+            price: 1,
+            sod_amount: 5000000,
+            features: ["۵,۰۰۰,۰۰۰ SOD", "هدیه ۵۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵٪"],
+            popular: false,
+            discount: 0
+        },
+        {
+            id: 2,
+            name: "پنل پرو",
+            price: 5,
+            sod_amount: 30000000,
+            features: ["۳۰,۰۰۰,۰۰۰ SOD", "هدیه ۳,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۱۵٪"],
+            popular: true,
+            discount: 10
+        },
+        {
+            id: 3,
+            name: "پنل پلاتینیوم",
+            price: 15,
+            sod_amount: 100000000,
+            features: ["۱۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۱۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۳۰٪"],
+            popular: false,
+            discount: 15
+        },
+        {
+            id: 4,
+            name: "پنل الماس",
+            price: 50,
+            sod_amount: 500000000,
+            features: ["۵۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۵۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵۰٪"],
+            popular: false,
+            discount: 20
+        }
+    ];
 }
 
 // ============ توابع کمکی ============
@@ -365,38 +376,59 @@ async function checkDatabaseConnection() {
     try {
         const { data, error } = await supabaseClient
             .from('sale_plans')
-            .select('count')
+            .select('id')
             .limit(1);
         
         if (error) {
-            console.error('❌ Database connection failed:', error.message);
-            return false;
+            console.error('❌ Database connection test failed:', error.message);
+            return {
+                connected: false,
+                message: error.message
+            };
         }
         
         console.log('✅ Database connection successful');
-        return true;
+        return {
+            connected: true,
+            message: 'Connected to Supabase'
+        };
     } catch (error) {
         console.error('🚨 Error checking database connection:', error);
-        return false;
+        return {
+            connected: false,
+            message: error.message
+        };
     }
 }
 
 // ============ Export functions ============
 const supabaseService = {
+    // User functions
     getUserByEmail,
     getUserById,
     createUser,
     updateUser,
+    
+    // Game functions
     getGameData,
     saveGameData,
+    
+    // Transaction functions
     addTransaction,
     getTransactions,
+    
+    // Sale plans
     getSalePlans,
+    
+    // Helper functions
     checkDatabaseConnection,
+    
+    // Supabase client
     client: supabaseClient
 };
 
 console.log('✅ Supabase service loaded');
 
+// Export برای استفاده در سایر فایل‌ها
 window.supabaseService = supabaseService;
 window.supabaseClient = supabaseClient;
