@@ -1071,9 +1071,9 @@
     </style>
 </head>
 <body>
-   <!-- صفحه ثبت نام -->
+ <!-- صفحه ثبت نام -->
 <div class="register-overlay" id="registerOverlay">
-    <div class="register-container">
+    <div class="register-container" style="max-height: 90vh; overflow-y: auto; padding-right: 5px;">
         <div class="register-header">
             <div class="register-icon">⛏️</div>
             <h1 class="register-title">ثبت نام در SODmAX</h1>
@@ -1111,7 +1111,7 @@
                 <i class="fas fa-user-plus"></i>
                 ایجاد حساب کاربری
             </button>
-        </form> <!-- ✅ اینجا فرم ثبت‌نام بسته می‌شود -->
+        </form>
 
         <div style="text-align: center; margin-top: 20px; color: var(--text-secondary); font-size: 12px;">
             با ثبت نام، <a href="#" onclick="showTerms()" style="color: var(--primary-light);">قوانین و شرایط</a> را می‌پذیرید
@@ -1134,7 +1134,7 @@
                     <input type="password" class="form-input" placeholder="رمز عبور خود را وارد کنید" id="loginPassword" required>
                 </div>
                 
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
                     <i class="fas fa-sign-in-alt"></i> ورود به حساب
                 </button>
             </form>
@@ -1145,7 +1145,9 @@
                 </a>
             </div>
         </div>
-        <!-- پایان فرم ورود -->
+        
+        <!-- فضای خالی برای اسکرول بهتر در موبایل -->
+        <div style="height: 30px;"></div>
         
     </div> <!-- بسته شدن register-container -->
 </div> <!-- بسته شدن register-overlay -->
@@ -1479,6 +1481,7 @@
     </script>
 </body>
 </html>
+
 
 
 
