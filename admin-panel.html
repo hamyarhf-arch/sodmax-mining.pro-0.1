@@ -784,23 +784,35 @@
         let missions = [];
         
         // وقتی DOM لود شد
-        document.addEventListener('DOMContentLoaded', async () => {
-            console.log('🚀 Admin panel loaded');
-            
-            // چک کردن احراز هویت
-            if (!window.authService || !window.authService.isUserVerified()) {
-                alert('⚠️ دسترسی غیرمجاز. لطفاً ابتدا وارد شوید.');
-                window.location.href = 'index.html';
-                return;
-            }
-            
-            // چک کردن ادمین بودن
-            const user = window.authService.getCurrentUser();
-            if (!user || user.email !== 'hamyarhf@gmail.com') {
-                alert('⚠️ این صفحه فقط برای ادمین اصلی قابل دسترسی است.');
-                window.location.href = 'index.html';
-                return;
-            }
+       document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 Admin panel loaded');
+    
+    // بررسی auth عمومی بازی
+    const userData = localStorage.getItem('sodmax_user');
+    if (!userData) {
+        alert('⚠️ لطفاً ابتدا از صفحه اصلی وارد حساب کاربری خود شوید.');
+        window.location.href = 'index.html';
+        return;
+    }
+    
+    const user = JSON.parse(userData);
+    
+    // لیست ادمین‌های مجاز
+    const adminEmails = [
+        'hamyarhf@gmail.com',
+        'admin@sodmax.com',
+        'test@admin.com'
+    ];
+    
+    // بررسی اینکه آیا کاربر ادمین است
+    if (!adminEmails.includes(user.email)) {
+        alert('⚠️ این صفحه فقط برای مدیران سیستم قابل دسترسی است.');
+        window.location.href = 'index.html';
+        return;
+    }
+    
+    console.log('✅ Admin access granted for:', user.email);
+    
             
             // بارگذاری اولیه
             await loadDashboardData();
