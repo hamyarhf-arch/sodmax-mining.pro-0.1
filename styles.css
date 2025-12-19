@@ -1264,3 +1264,48 @@ button, .btn, .miner-core {
 }
 
 /* ========== END OF STYLES ========== */
+/* استایل دکمه خروج */
+.btn-logout {
+    background: linear-gradient(135deg, #FF6B35 0%, #FF5722 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-decoration: none;
+    letter-spacing: 0.3px;
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+    min-height: 48px;
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+}
+
+.btn-logout:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(255, 107, 53, 0.3);
+}
+
+.btn-logout:active {
+    transform: translateY(0);
+}
+
+/* برای موبایل */
+@media (max-width: 768px) {
+    .wallet-section > div {
+        flex-direction: column;
+    }
+    
+    .btn-logout {
+        width: 100%;
+    }
+}
