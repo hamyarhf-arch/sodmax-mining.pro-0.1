@@ -845,25 +845,43 @@ window.uiService = new UIService();
 document.addEventListener('DOMContentLoaded', () => {
     console.log('📄 DOM loaded, UI service active');
 });
-// در ui.js مطمئن شوید این تابع وجود دارد:
+// اضافه کردن async اگر نیست
 async checkAdminStatus(user) {
-    if (!user) return false;
-    
-    const adminEmails = ['hamyarhf@gmail.com'];
-    const userEmail = user.email.toLowerCase().trim();
-    const isAdmin = adminEmails.includes(userEmail);
-    
-    // نمایش/مخفی کردن لینک مدیریت
-    const adminLink = document.getElementById('adminLink');
-    if (adminLink) {
-        if (isAdmin) {
-            adminLink.style.display = 'flex';
-            // ذخیره وضعیت ادمین در localStorage
-            localStorage.setItem('sodmax_admin', 'true');
-        } else {
-            adminLink.style.display = 'none';
+    try {
+        if (!user) return false;
+        
+        console.log('🔍 Checking admin status for:', user.email);
+        
+        const adminEmails = [
+            'hamyarhf@gmail.com',
+            'admin@sodmax.com',
+            'test@admin.com'
+        ];
+        
+        const userEmail = user.email.toLowerCase().trim();
+        const isAdmin = adminEmails.includes(userEmail);
+        
+        console.log('👑 Admin status:', isAdmin ? 'ADMIN' : 'USER');
+        
+        // نمایش یا مخفی کردن لینک ادمین
+        const adminLink = document.getElementById('adminLink');
+        if (adminLink) {
+            if (isAdmin) {
+                adminLink.style.display = 'flex';
+                adminLink.style.background = 'rgba(255, 107, 53, 0.3)';
+                adminLink.innerHTML = `
+                    <i class="fas fa-user-shield"></i>
+                    <span class="nav-text">مدیریت</span>
+                `;
+                localStorage.setItem('sodmax_admin', 'true');
+            } else {
+                adminLink.style.display = 'none';
+            }
         }
+        
+        return isAdmin;
+    } catch (error) {
+        console.error('❌ Error in checkAdminStatus:', error);
+        return false;
     }
-    
-    return isAdmin;
 }
