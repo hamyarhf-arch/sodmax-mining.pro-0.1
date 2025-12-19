@@ -390,7 +390,46 @@ if (loginForm) {
             this.showNotification('❌', error.message || 'خطا در دریافت USDT');
         }
     }
-    
+    // این تابع را به کلاس UIService اضافه کنید
+async checkAdminStatus(user) {
+    try {
+        if (!user) return false;
+        
+        console.log('🔍 Checking admin status for:', user.email);
+        
+        const adminEmails = [
+            'hamyarhf@gmail.com',
+            'admin@sodmax.com', 
+            'test@admin.com'
+        ];
+        
+        const userEmail = user.email.toLowerCase().trim();
+        const isAdmin = adminEmails.includes(userEmail);
+        
+        console.log('👑 Admin status:', isAdmin ? 'ADMIN' : 'USER');
+        
+        // نمایش یا مخفی کردن لینک ادمین
+        const adminLink = document.getElementById('adminLink');
+        if (adminLink) {
+            if (isAdmin) {
+                adminLink.style.display = 'flex';
+                adminLink.style.background = 'rgba(255, 107, 53, 0.3)';
+                adminLink.innerHTML = `
+                    <i class="fas fa-user-shield"></i>
+                    <span class="nav-text">مدیریت</span>
+                `;
+                localStorage.setItem('sodmax_admin', 'true');
+            } else {
+                adminLink.style.display = 'none';
+            }
+        }
+        
+        return isAdmin;
+    } catch (error) {
+        console.error('❌ Error in checkAdminStatus:', error);
+        return false;
+    }
+}
     // 9. toggle استخراج خودکار
     async toggleAutoMining() {
         if (!this.authService?.isUserVerified()) {
