@@ -1,742 +1,1607 @@
-// js/supabase.js - نسخه اصلاح شده و کامل
-
-// Supabase Configuration
-const SUPABASE_URL = 'https://wxxhulztrxmjqftxcetp.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4eGh1bHp0cnhtanFmdHhjZXRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzEwNDcsImV4cCI6MjA4MTY0NzA0N30.iC6Ief8aF-zw66RQRSnLxA-BmAjChQj9xy4HkJpGOA4';
-
-// Initialize Supabase client
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-        storage: localStorage
-    },
-    db: {
-        schema: 'public'
-    },
-    realtime: {
-        params: {
-            eventsPerSecond: 2
-        }
-    },
-    global: {
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_ANON_KEY,
-            'Prefer': 'return=representation'
-        }
-    }
-});
-
-console.log('✅ Supabase initialized with URL:', SUPABASE_URL);
-
-// ============ توابع کاربران ============
-async function getUserByEmail(email) {
-    try {
-        console.log('🔍 Getting user by email:', email);
-        
-        const { data, error } = await supabaseClient
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .maybeSingle();
-        
-        if (error) {
-            console.error('❌ Error getting user by email:', error);
-            return null;
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>پنل مدیریت کامل SODmAX</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #0066FF;
+            --primary-dark: #0052CC;
+            --secondary: #00D4AA;
+            --accent: #FF6B35;
+            --dark: #0A0F1C;
+            --card: #121828;
+            --text: #FFFFFF;
+            --text-secondary: #94A3B8;
+            --success: #00C853;
+            --warning: #FFB300;
+            --error: #FF3D00;
         }
         
-        console.log('✅ User found:', data ? data.email : 'null');
-        return data;
-    } catch (error) {
-        console.error('🚨 Exception in getUserByEmail:', error);
-        return null;
-    }
-}
-
-async function getUserById(userId) {
-    try {
-        console.log('🔍 Getting user by ID:', userId);
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
         
-        const { data, error } = await supabaseClient
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
+        body {
+            background: var(--dark);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        
+        .admin-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* سایدبار */
+        .sidebar {
+            width: 250px;
+            background: var(--card);
+            border-left: 1px solid rgba(255,255,255,0.1);
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        
+        .logo {
+            text-align: center;
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .logo h1 {
+            font-size: 20px;
+            color: var(--primary);
+        }
+        
+        .logo p {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .nav-menu {
+            list-style: none;
+        }
+        
+        .nav-menu li {
+            margin-bottom: 5px;
+        }
+        
+        .nav-menu a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s;
+            border-right: 3px solid transparent;
+        }
+        
+        .nav-menu a:hover,
+        .nav-menu a.active {
+            background: rgba(0,102,255,0.1);
+            color: var(--primary);
+            border-right-color: var(--primary);
+        }
+        
+        .nav-menu i {
+            width: 20px;
+            margin-left: 10px;
+        }
+        
+        /* محتوای اصلی */
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 100vh;
+        }
+        
+        .header {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(145deg, #0D1428, #121828);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .stat-card h3 {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary);
+        }
+        
+        /* بخش‌های محتوا */
+        .content-section {
+            background: var(--card);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+        
+        /* جدول‌ها */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 15px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: right;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        th {
+            background: rgba(0,102,255,0.1);
+            color: var(--primary-light);
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        
+        /* فرم‌ها */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            color: white;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        /* تب‌ها */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            color: var(--text-secondary);
+        }
+        
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* تنظیمات */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .setting-card {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .setting-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--primary-light);
+        }
+        
+        .setting-description {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+        
+        /* مودال */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: var(--card);
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- سایدبار -->
+        <div class="sidebar">
+            <div class="logo">
+                <h1><i class="fas fa-user-shield"></i> پنل مدیریت</h1>
+                <p>SODmAX Pro v1.0</p>
+            </div>
             
-        if (error) {
-            console.error('❌ Error getting user by ID:', error.message);
-            return null;
-        }
+            <ul class="nav-menu">
+                <li><a href="#" class="active" onclick="showSection('dashboard')">
+                    <i class="fas fa-tachometer-alt"></i>داشبورد
+                </a></li>
+                <li><a href="#" onclick="showSection('game-settings')">
+                    <i class="fas fa-cogs"></i>تنظیمات بازی
+                </a></li>
+                <li><a href="#" onclick="showSection('sale-plans')">
+                    <i class="fas fa-shopping-cart"></i>پنل‌های فروش
+                </a></li>
+                <li><a href="#" onclick="showSection('missions')">
+                    <i class="fas fa-tasks"></i>مأموریت‌ها
+                </a></li>
+                <li><a href="#" onclick="showSection('users')">
+                    <i class="fas fa-users"></i>کاربران
+                </a></li>
+                <li><a href="#" onclick="showSection('transactions')">
+                    <i class="fas fa-exchange-alt"></i>تراکنش‌ها
+                </a></li>
+                <li><a href="#" onclick="showSection('reports')">
+                    <i class="fas fa-chart-bar"></i>گزارشات
+                </a></li>
+                <li><a href="index.html" style="color: var(--accent);">
+                    <i class="fas fa-gamepad"></i>بازگشت به بازی
+                </a></li>
+            </ul>
+        </div>
         
-        console.log('✅ User by ID result:', data ? 'found' : 'not found');
-        return data;
-    } catch (error) {
-        console.error('🚨 Exception in getUserById:', error);
-        return null;
-    }
-}
-
-async function createUser(userData) {
-    try {
-        console.log('📝 Creating user in database:', {
-            email: userData.email,
-            id: userData.id
+        <!-- محتوای اصلی -->
+        <div class="main-content" id="mainContent">
+            <!-- داشبورد -->
+            <div class="content-section active" id="dashboard-section">
+                <div class="header">
+                    <h1><i class="fas fa-tachometer-alt"></i> داشبورد مدیریت</h1>
+                    <div id="lastUpdate">آخرین آپدیت: هم‌اکنون</div>
+                </div>
+                
+                <div class="stats-grid" id="dashboardStats">
+                    <!-- با JS پر می‌شود -->
+                </div>
+                
+                <div class="content-section">
+                    <h2>فعالیت‌های اخیر</h2>
+                    <div id="recentActivity">
+                        <!-- با JS پر می‌شود -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- تنظیمات بازی -->
+            <div class="content-section" id="game-settings-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-cogs"></i> تنظیمات پیشرفته بازی</h2>
+                    <button class="btn btn-success" onclick="saveAllSettings()">
+                        <i class="fas fa-save"></i> ذخیره همه تغییرات
+                    </button>
+                </div>
+                
+                <div class="tabs">
+                    <div class="tab active" onclick="showSettingsTab('mining')">⚙️ استخراج</div>
+                    <div class="tab" onclick="showSettingsTab('progress')">📈 پیشرفت</div>
+                    <div class="tab" onclick="showSettingsTab('economy')">💰 اقتصاد</div>
+                    <div class="tab" onclick="showSettingsTab('other')">⚡ سایر</div>
+                </div>
+                
+                <!-- تب استخراج -->
+                <div class="tab-content active" id="mining-settings">
+                    <div class="settings-grid" id="miningSettings">
+                        <!-- با JS پر می‌شود -->
+                    </div>
+                </div>
+                
+                <!-- تب پیشرفت -->
+                <div class="tab-content" id="progress-settings">
+                    <div class="settings-grid" id="progressSettings">
+                        <!-- با JS پر می‌شود -->
+                    </div>
+                </div>
+                
+                <!-- تب اقتصاد -->
+                <div class="tab-content" id="economy-settings">
+                    <div class="settings-grid" id="economySettings">
+                        <!-- با JS پر می‌شود -->
+                    </div>
+                </div>
+                
+                <!-- تب سایر -->
+                <div class="tab-content" id="other-settings">
+                    <div class="settings-grid" id="otherSettings">
+                        <!-- با JS پر می‌شود -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- پنل‌های فروش -->
+            <div class="content-section" id="sale-plans-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-shopping-cart"></i> مدیریت پنل‌های فروش</h2>
+                    <button class="btn btn-primary" onclick="showEditPlanModal(null)">
+                        <i class="fas fa-plus"></i> پنل جدید
+                    </button>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>نام پنل</th>
+                                <th>قیمت (USDT)</th>
+                                <th>SOD اصلی</th>
+                                <th>تخفیف</th>
+                                <th>SOD کل</th>
+                                <th>ویژه</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salePlansTable">
+                            <!-- با JS پر می‌شود -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- مأموریت‌ها -->
+            <div class="content-section" id="missions-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-tasks"></i> مدیریت مأموریت‌ها (۶ مأموریت)</h2>
+                    <button class="btn btn-primary" onclick="showEditMissionModal(null)">
+                        <i class="fas fa-plus"></i> مأموریت جدید
+                    </button>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>عنوان</th>
+                                <th>نوع</th>
+                                <th>هدف</th>
+                                <th>پاداش SOD</th>
+                                <th>پاداش USDT</th>
+                                <th>وضعیت</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="missionsTable">
+                            <!-- با JS پر می‌شود -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- کاربران -->
+            <div class="content-section" id="users-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-users"></i> مدیریت کاربران</h2>
+                    <div>
+                        <input type="text" id="searchUsers" placeholder="جستجوی کاربر..." class="form-input" style="width: 200px;">
+                        <button class="btn btn-primary" onclick="searchUsers()">
+                            <i class="fas fa-search"></i> جستجو
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>ایمیل</th>
+                                <th>نام</th>
+                                <th>سطح</th>
+                                <th>SOD</th>
+                                <th>USDT</th>
+                                <th>آخرین ورود</th>
+                                <th>وضعیت</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTable">
+                            <!-- با JS پر می‌شود -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="btn btn-outline" onclick="loadMoreUsers()">
+                        <i class="fas fa-arrow-down"></i> بارگذاری بیشتر
+                    </button>
+                </div>
+            </div>
+            
+            <!-- تراکنش‌ها -->
+            <div class="content-section" id="transactions-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-exchange-alt"></i> تراکنش‌ها</h2>
+                    <div>
+                        <select id="transactionFilter" class="form-input" style="width: 150px;">
+                            <option value="all">همه</option>
+                            <option value="mining">استخراج</option>
+                            <option value="purchase">خرید</option>
+                            <option value="usdt_reward">پاداش USDT</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="filterTransactions()">
+                            <i class="fas fa-filter"></i> فیلتر
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>کاربر</th>
+                                <th>نوع</th>
+                                <th>مقدار</th>
+                                <th>واحد</th>
+                                <th>توضیحات</th>
+                                <th>تاریخ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTable">
+                            <!-- با JS پر می‌شود -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- گزارشات -->
+            <div class="content-section" id="reports-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-chart-bar"></i> گزارشات و آمار</h2>
+                    <div>
+                        <select id="reportPeriod" class="form-input" style="width: 150px;">
+                            <option value="today">امروز</option>
+                            <option value="week">هفته جاری</option>
+                            <option value="month">ماه جاری</option>
+                            <option value="all">همه زمان</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="generateReport()">
+                            <i class="fas fa-chart-line"></i> ایجاد گزارش
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="reportContent">
+                    <!-- با JS پر می‌شود -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- مودال ویرایش پنل -->
+    <div class="modal" id="editPlanModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> ویرایش پنل فروش</h3>
+                <button class="modal-close" onclick="closeModal('editPlanModal')">×</button>
+            </div>
+            <form id="planForm">
+                <input type="hidden" id="planId">
+                <div class="form-group">
+                    <label class="form-label">نام پنل</label>
+                    <input type="text" id="planName" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">قیمت (USDT)</label>
+                    <input type="number" id="planPrice" class="form-input" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">مقدار SOD اصلی</label>
+                    <input type="number" id="planSodAmount" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">درصد تخفیف</label>
+                    <input type="number" id="planDiscount" class="form-input" min="0" max="100" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ویژه (پیشنهاد)</label>
+                    <input type="checkbox" id="planPopular">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ویژگی‌ها (هر خط یک ویژگی)</label>
+                    <textarea id="planFeatures" class="form-input" rows="4"></textarea>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" class="btn btn-success" style="flex: 1;">
+                        <i class="fas fa-save"></i> ذخیره
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="deletePlan()" id="deletePlanBtn" style="display: none;">
+                        <i class="fas fa-trash"></i> حذف
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- مودال ویرایش مأموریت -->
+    <div class="modal" id="editMissionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> ویرایش مأموریت</h3>
+                <button class="modal-close" onclick="closeModal('editMissionModal')">×</button>
+            </div>
+            <form id="missionForm">
+                <input type="hidden" id="missionId">
+                <div class="form-group">
+                    <label class="form-label">عنوان مأموریت</label>
+                    <input type="text" id="missionTitle" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">توضیحات</label>
+                    <textarea id="missionDescription" class="form-input" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">نوع مأموریت</label>
+                    <select id="missionType" class="form-input">
+                        <option value="daily">روزانه</option>
+                        <option value="weekly">هفتگی</option>
+                        <option value="special">ویژه</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">نوع هدف</label>
+                    <select id="missionTargetType" class="form-input">
+                        <option value="manual_mining">تعداد استخراج دستی</option>
+                        <option value="auto_mining">مدت استخراج خودکار (میلی‌ثانیه)</option>
+                        <option value="use_boost">استفاده از بوست</option>
+                        <option value="buy_plans">خرید پنل</option>
+                        <option value="total_mining">SOD کل استخراج شده</option>
+                        <option value="reach_level">رسیدن به سطح</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">مقدار هدف</label>
+                    <input type="number" id="missionTarget" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">پاداش SOD</label>
+                    <input type="number" id="missionRewardSod" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">پاداش USDT</label>
+                    <input type="number" id="missionRewardUsdt" class="form-input" step="0.0001" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">پاداش تجربه (XP)</label>
+                    <input type="number" id="missionRewardExp" class="form-input" value="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">فعال</label>
+                    <input type="checkbox" id="missionActive" checked>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" class="btn btn-success" style="flex: 1;">
+                        <i class="fas fa-save"></i> ذخیره
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="deleteMission()" id="deleteMissionBtn" style="display: none;">
+                        <i class="fas fa-trash"></i> حذف
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- مودال ویرایش کاربر -->
+    <div class="modal" id="editUserModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-edit"></i> ویرایش کاربر</h3>
+                <button class="modal-close" onclick="closeModal('editUserModal')">×</button>
+            </div>
+            <form id="userForm">
+                <input type="hidden" id="userId">
+                <div class="form-group">
+                    <label class="form-label">ایمیل</label>
+                    <input type="email" id="userEmail" class="form-input" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">نام کامل</label>
+                    <input type="text" id="userFullName" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">سطح</label>
+                    <input type="number" id="userLevel" class="form-input" min="1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">موجودی SOD</label>
+                    <input type="number" id="userSod" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">موجودی USDT</label>
+                    <input type="number" id="userUsdt" class="form-input" step="0.000001">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">قدرت استخراج</label>
+                    <input type="number" id="userMiningPower" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">وضعیت حساب</label>
+                    <select id="userStatus" class="form-input">
+                        <option value="active">فعال</option>
+                        <option value="suspended">تعلیق</option>
+                        <option value="banned">مسدود</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" class="btn btn-success" style="flex: 1;">
+                        <i class="fas fa-save"></i> ذخیره تغییرات
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="resetUserPassword()">
+                        <i class="fas fa-key"></i> ریست رمز
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- اسکریپت‌ها -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="js/supabase.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        // متغیرهای گلوبال
+        let currentUserPage = 1;
+        const usersPerPage = 20;
+        let gameSettings = {};
+        let salePlans = [];
+        let missions = [];
+        
+        // وقتی DOM لود شد
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('🚀 Admin panel loaded');
+            
+            // چک کردن احراز هویت
+            if (!window.authService || !window.authService.isUserVerified()) {
+                alert('⚠️ دسترسی غیرمجاز. لطفاً ابتدا وارد شوید.');
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            // چک کردن ادمین بودن
+            const user = window.authService.getCurrentUser();
+            if (!user || user.email !== 'hamyarhf@gmail.com') {
+                alert('⚠️ این صفحه فقط برای ادمین اصلی قابل دسترسی است.');
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            // بارگذاری اولیه
+            await loadDashboardData();
+            await loadGameSettings();
+            await loadSalePlans();
+            await loadMissions();
+            
+            // ایونت‌ها
+            document.getElementById('planForm').addEventListener('submit', savePlan);
+            document.getElementById('missionForm').addEventListener('submit', saveMission);
+            document.getElementById('userForm').addEventListener('submit', saveUser);
+            
+            // ریفرش خودکار هر 30 ثانیه
+            setInterval(updateDashboard, 30000);
         });
         
-        // ابتدا چک می‌کنیم آیا کاربر وجود دارد
-        const existingUser = await getUserByEmail(userData.email);
-        if (existingUser) {
-            console.log('✅ User already exists:', existingUser.email);
-            return existingUser;
-        }
-        
-        // داده‌های کاربر جدید
-        const newUser = {
-            id: userData.id,
-            email: userData.email,
-            full_name: userData.fullName || userData.email.split('@')[0],
-            referral_code: userData.referralCode || '',
-            level: 1,
-            sod_balance: 1000000,
-            usdt_balance: 0,
-            mining_power: 10,
-            total_mined: 0,
-            usdt_progress: 1000000,
-            last_login: new Date().toISOString(),
-            created_at: new Date().toISOString()
-        };
-        
-        console.log('📤 Inserting user:', newUser);
-        
-        const { data, error } = await supabaseClient
-            .from('users')
-            .insert([newUser])
-            .select()
-            .single();
-        
-        if (error) {
-            console.error('❌ Error creating user:', {
-                message: error.message,
-                code: error.code,
-                details: error.details,
-                hint: error.hint
+        // تابع نمایش بخش‌ها
+        function showSection(sectionId) {
+            // مخفی کردن همه بخش‌ها
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
             });
-            return null;
-        }
-        
-        console.log('✅ User created successfully:', data.email);
-        return data;
-    } catch (error) {
-        console.error('🚨 Exception in createUser:', error);
-        return null;
-    }
-}
-
-async function updateUser(userId, updateData) {
-    try {
-        console.log('📝 Updating user:', userId, updateData);
-        
-        const { data, error } = await supabaseClient
-            .from('users')
-            .update({
-                ...updateData,
-                last_updated: new Date().toISOString()
-            })
-            .eq('id', userId)
-            .select();
-        
-        if (error) {
-            console.error('❌ Error updating user:', error.message);
-            return false;
-        }
-        
-        console.log('✅ User updated successfully:', userId);
-        return true;
-    } catch (error) {
-        console.error('🚨 Exception in updateUser:', error);
-        return false;
-    }
-}
-
-// ============ توابع بازی ============
-async function getGameData(userId) {
-    try {
-        console.log('🎮 Getting game data for user:', userId);
-        
-        // ابتدا از دیتابیس می‌خوانیم
-        const userData = await getUserById(userId);
-        
-        if (userData) {
-            console.log('✅ Game data loaded from database for:', userData.email);
             
-            return {
-                sodBalance: userData.sod_balance || 1000000,
-                usdtBalance: Number(userData.usdt_balance) || 0,
-                todayEarnings: 0,
-                miningPower: userData.mining_power || 10,
-                userLevel: userData.level || 1,
-                usdtProgress: userData.usdt_progress || 1000000,
-                totalMined: userData.total_mined || 0,
-                lastUpdated: userData.last_updated || new Date().toISOString()
-            };
-        }
-        
-        // اگر کاربر در دیتابیس نبود
-        console.log('👤 User not in database, returning default game data');
-        return {
-            sodBalance: 1000000,
-            usdtBalance: 0,
-            todayEarnings: 0,
-            miningPower: 10,
-            userLevel: 1,
-            usdtProgress: 1000000,
-            totalMined: 0,
-            lastUpdated: new Date().toISOString()
-        };
-        
-    } catch (error) {
-        console.error('🚨 Exception in getGameData:', error);
-        return {
-            sodBalance: 1000000,
-            usdtBalance: 0,
-            todayEarnings: 0,
-            miningPower: 10,
-            userLevel: 1,
-            usdtProgress: 1000000,
-            totalMined: 0,
-            lastUpdated: new Date().toISOString()
-        };
-    }
-}
-
-async function saveGameData(userId, gameData) {
-    try {
-        console.log('💾 Saving game data for user:', userId, {
-            sodBalance: gameData.sodBalance,
-            usdtBalance: gameData.usdtBalance
-        });
-        
-        // همیشه در localStorage ذخیره می‌کنیم
-        localStorage.setItem(`sodmax_game_${userId}`, JSON.stringify(gameData));
-        
-        // آماده کردن داده برای دیتابیس
-        const updateData = {
-            sod_balance: gameData.sodBalance,
-            usdt_balance: gameData.usdtBalance,
-            mining_power: gameData.miningPower,
-            level: gameData.userLevel,
-            usdt_progress: gameData.usdtProgress,
-            total_mined: gameData.totalMined,
-            last_updated: new Date().toISOString()
-        };
-        
-        console.log('📤 Sending update to database:', updateData);
-        
-        const { error } = await supabaseClient
-            .from('users')
-            .update(updateData)
-            .eq('id', userId);
-        
-        if (error) {
-            console.warn('⚠️ Database update failed:', error.message);
-            console.log('📱 Using localStorage only for now');
-            return false;
-        }
-        
-        console.log('✅ Game data saved to database successfully');
-        return true;
-    } catch (error) {
-        console.error('🚨 Exception in saveGameData:', error);
-        console.log('📱 Saved to localStorage only due to exception');
-        return false;
-    }
-}
-
-// ============ توابع تراکنش‌ها ============
-async function addTransaction(userId, transaction) {
-    try {
-        console.log('📊 Adding transaction:', {
-            userId: userId,
-            type: transaction.type,
-            amount: transaction.amount
-        });
-        
-        const transactionData = {
-            user_id: userId,
-            type: transaction.type,
-            amount: transaction.amount,
-            currency: transaction.currency,
-            description: transaction.description || '',
-            created_at: new Date().toISOString()
-        };
-        
-        console.log('📤 Inserting transaction:', transactionData);
-        
-        const { error } = await supabaseClient
-            .from('transactions')
-            .insert([transactionData]);
-        
-        if (error) {
-            console.warn('⚠️ Could not save transaction to DB:', error.message);
-            
-            // ذخیره در localStorage به عنوان fallback
-            const transactions = JSON.parse(localStorage.getItem(`sodmax_transactions_${userId}`) || '[]');
-            transactions.push(transactionData);
-            localStorage.setItem(`sodmax_transactions_${userId}`, JSON.stringify(transactions));
-            
-            return false;
-        }
-        
-        console.log('✅ Transaction added to database successfully');
-        return true;
-    } catch (error) {
-        console.error('🚨 Exception in addTransaction:', error);
-        
-        // ذخیره در localStorage
-        const transactions = JSON.parse(localStorage.getItem(`sodmax_transactions_${userId}`) || '[]');
-        transactions.push({
-            ...transaction,
-            created_at: new Date().toISOString()
-        });
-        localStorage.setItem(`sodmax_transactions_${userId}`, JSON.stringify(transactions));
-        
-        return false;
-    }
-}
-
-async function getTransactions(userId, limit = 20) {
-    try {
-        console.log('📋 Getting transactions for user:', userId);
-        
-        const { data, error } = await supabaseClient
-            .from('transactions')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-        
-        if (error) {
-            console.warn('⚠️ Could not get transactions from DB:', error.message);
-            
-            // از localStorage استفاده می‌کنیم
-            const transactions = JSON.parse(localStorage.getItem(`sodmax_transactions_${userId}`) || '[]');
-            return transactions.slice(0, limit);
-        }
-        
-        console.log('✅ Transactions loaded:', data ? data.length : 0);
-        return data || [];
-    } catch (error) {
-        console.error('🚨 Exception in getTransactions:', error);
-        
-        // از localStorage استفاده می‌کنیم
-        const transactions = JSON.parse(localStorage.getItem(`sodmax_transactions_${userId}`) || '[]');
-        return transactions.slice(0, limit);
-    }
-}
-
-// ============ توابع پنل‌های فروش ============
-async function getSalePlans() {
-    try {
-        console.log('🛒 Getting sale plans from database...');
-        
-        const { data, error } = await supabaseClient
-            .from('sale_plans')
-            .select('*')
-            .order('price', { ascending: true });
-        
-        if (error) {
-            console.warn('⚠️ Could not get sale plans from DB:', error.message);
-            console.log('📱 Using default sale plans');
-            return getDefaultSalePlans();
-        }
-        
-        console.log('✅ Sale plans loaded from database:', data.length);
-        return data || getDefaultSalePlans();
-    } catch (error) {
-        console.error('🚨 Exception in getSalePlans:', error);
-        return getDefaultSalePlans();
-    }
-}
-
-function getDefaultSalePlans() {
-    return [
-        {
-            id: 1,
-            name: "پنل استارتر",
-            price: 1,
-            sod_amount: 5000000,
-            features: ["۵,۰۰۰,۰۰۰ SOD", "هدیه ۵۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵٪"],
-            popular: false,
-            discount: 0
-        },
-        {
-            id: 2,
-            name: "پنل پرو",
-            price: 5,
-            sod_amount: 30000000,
-            features: ["۳۰,۰۰۰,۰۰۰ SOD", "هدیه ۳,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۱۵٪"],
-            popular: true,
-            discount: 10
-        },
-        {
-            id: 3,
-            name: "پنل پلاتینیوم",
-            price: 15,
-            sod_amount: 100000000,
-            features: ["۱۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۱۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۳۰٪"],
-            popular: false,
-            discount: 15
-        },
-        {
-            id: 4,
-            name: "پنل الماس",
-            price: 50,
-            sod_amount: 500000000,
-            features: ["۵۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۵۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵۰٪"],
-            popular: false,
-            discount: 20
-        }
-    ];
-}
-
-// ============ توابع تنظیمات بازی ============
-async function getGameSettings() {
-    try {
-        console.log('⚙️ Getting game settings from database...');
-        
-        const { data, error } = await supabaseClient
-            .from('game_settings')
-            .select('*')
-            .order('setting_key');
-        
-        if (error) {
-            console.error('❌ Error getting game settings:', error);
-            return getDefaultGameSettings();
-        }
-        
-        // تبدیل به object
-        const settings = {};
-        if (data) {
-            data.forEach(setting => {
-                settings[setting.setting_key] = {
-                    value: setting.setting_value,
-                    description: setting.description
-                };
+            // آپدیت منو
+            document.querySelectorAll('.nav-menu a').forEach(link => {
+                link.classList.remove('active');
             });
+            event.target.classList.add('active');
+            
+            // نمایش بخش مورد نظر
+            const section = document.getElementById(sectionId + '-section');
+            if (section) {
+                section.classList.add('active');
+                
+                // اگر بخش داشبورد است، آپدیت کن
+                if (sectionId === 'dashboard') {
+                    updateDashboard();
+                }
+            }
         }
         
-        console.log('✅ Game settings loaded:', Object.keys(settings).length);
-        return settings;
-    } catch (error) {
-        console.error('🚨 Exception in getGameSettings:', error);
-        return getDefaultGameSettings();
-    }
-}
-
-function getDefaultGameSettings() {
-    return {
-        'mining_base_power': { value: '10', description: 'قدرت پایه استخراج (SOD در هر کلیک)' },
-        'mining_auto_cost': { value: '10000', description: 'حداقل SOD برای فعال‌سازی استخراج خودکار' },
-        'mining_auto_interval': { value: '3000', description: 'فاصله استخراج خودکار (میلی‌ثانیه)' },
-        'mining_boost_power': { value: '3', description: 'میزان افزایش قدرت بوست (ضریب)' },
-        'mining_boost_cost': { value: '5000', description: 'هزینه SOD برای بوست' },
-        'mining_boost_duration': { value: '1800000', description: 'مدت زمان بوست (میلی‌ثانیه)' },
-        'level_up_chance': { value: '0.03', description: 'شانس ارتقاء سطح (۰.۰۳ = ۳٪)' },
-        'usdt_conversion_rate': { value: '10000000', description: 'تعداد SOD برای دریافت ۰.۰۱ USDT' },
-        'usdt_reward_amount': { value: '0.01', description: 'مقدار USDT پاداش' }
-    };
-}
-
-async function updateGameSetting(key, value) {
-    try {
-        console.log('⚙️ Updating game setting:', key, '=', value);
-        
-        const { error } = await supabaseClient
-            .from('game_settings')
-            .update({ 
-                setting_value: value,
-                updated_at: new Date().toISOString()
-            })
-            .eq('setting_key', key);
-        
-        if (error) {
-            console.error('❌ Error updating setting:', error);
-            return false;
+        // ==================== DASHBOARD ====================
+        async function loadDashboardData() {
+            try {
+                const statsGrid = document.getElementById('dashboardStats');
+                if (!statsGrid) return;
+                
+                // دریافت آمار
+                const userCount = await window.supabaseService.getUserCount();
+                const { data: transactions } = await window.supabaseClient
+                    .from('transactions')
+                    .select('count')
+                    .single();
+                
+                const { data: totalSod } = await window.supabaseClient
+                    .from('users')
+                    .select('sod_balance')
+                    .then(res => ({
+                        total: res.data.reduce((sum, user) => sum + (user.sod_balance || 0), 0)
+                    }));
+                
+                const { data: recentUsers } = await window.supabaseClient
+                    .from('users')
+                    .select('*')
+                    .order('last_login', { ascending: false })
+                    .limit(5);
+                
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <h3>👥 کاربران کل</h3>
+                        <div class="value">${userCount}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>💳 تراکنش‌ها</h3>
+                        <div class="value">${transactions?.count || 0}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>💰 SOD کل شبکه</h3>
+                        <div class="value">${formatNumber(totalSod?.total || 0)}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>📊 مأموریت‌ها</h3>
+                        <div class="value">6/6</div>
+                    </div>
+                `;
+                
+                // نمایش آخرین فعالیت‌ها
+                const recentActivity = document.getElementById('recentActivity');
+                if (recentActivity && recentUsers) {
+                    recentActivity.innerHTML = recentUsers.map(user => `
+                        <div style="display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <div>
+                                <strong>${user.full_name || user.email}</strong>
+                                <div style="font-size: 12px; color: var(--text-secondary);">
+                                    سطح ${user.level || 1} • ${formatNumber(user.sod_balance || 0)} SOD
+                                </div>
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                ${new Date(user.last_login).toLocaleString('fa-IR')}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                
+                // آپدیت تاریخ آخرین بروزرسانی
+                document.getElementById('lastUpdate').textContent = 
+                    `آخرین آپدیت: ${new Date().toLocaleTimeString('fa-IR')}`;
+                    
+            } catch (error) {
+                console.error('❌ Error loading dashboard:', error);
+            }
         }
         
-        console.log('✅ Setting updated successfully');
-        return true;
-    } catch (error) {
-        console.error('🚨 Exception in updateGameSetting:', error);
-        return false;
-    }
-}
-
-// ============ توابع مأموریت‌ها ============
-async function getMissions() {
-    try {
-        console.log('🎯 Getting missions from database...');
-        
-        const { data, error } = await supabaseClient
-            .from('missions')
-            .select('*')
-            .order('order_index');
-        
-        if (error) {
-            console.error('❌ Error getting missions:', error);
-            return [];
+        function updateDashboard() {
+            loadDashboardData();
         }
         
-        console.log('✅ Missions loaded:', data ? data.length : 0);
-        return data || [];
-    } catch (error) {
-        console.error('🚨 Exception in getMissions:', error);
-        return [];
-    }
-}
-
-async function getUserMissions(userId) {
-    try {
-        console.log('🎯 Getting user missions for:', userId);
-        
-        const { data, error } = await supabaseClient
-            .from('user_missions')
-            .select(`
-                *,
-                missions (*)
-            `)
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
-        
-        if (error) {
-            console.error('❌ Error getting user missions:', error);
-            return [];
+        // ==================== GAME SETTINGS ====================
+        async function loadGameSettings() {
+            try {
+                gameSettings = await window.supabaseService.getGameSettings();
+                renderGameSettings();
+            } catch (error) {
+                console.error('❌ Error loading game settings:', error);
+            }
         }
         
-        return data || [];
-    } catch (error) {
-        console.error('🚨 Exception in getUserMissions:', error);
-        return [];
-    }
-}
-
-async function updateUserMission(userId, missionId, progress, isCompleted = false) {
-    try {
-        const updateData = {
-            progress: progress,
-            updated_at: new Date().toISOString()
-        };
-        
-        if (isCompleted) {
-            updateData.is_completed = true;
-            updateData.completed_at = new Date().toISOString();
+        function renderGameSettings() {
+            // دسته‌بندی تنظیمات
+            const miningSettings = {};
+            const progressSettings = {};
+            const economySettings = {};
+            const otherSettings = {};
+            
+            Object.keys(gameSettings).forEach(key => {
+                if (key.includes('mining') || key.includes('boost') || key.includes('auto')) {
+                    miningSettings[key] = gameSettings[key];
+                } else if (key.includes('level') || key.includes('mission') || key.includes('progress')) {
+                    progressSettings[key] = gameSettings[key];
+                } else if (key.includes('sale') || key.includes('price') || key.includes('usdt')) {
+                    economySettings[key] = gameSettings[key];
+                } else {
+                    otherSettings[key] = gameSettings[key];
+                }
+            });
+            
+            // رندر تنظیمات استخراج
+            const miningContainer = document.getElementById('miningSettings');
+            if (miningContainer) {
+                miningContainer.innerHTML = Object.keys(miningSettings).map(key => `
+                    <div class="setting-card">
+                        <div class="setting-title">${key.replace(/_/g, ' ')}</div>
+                        <div class="setting-description">${miningSettings[key].description || ''}</div>
+                        <input type="text" 
+                               class="form-input" 
+                               value="${miningSettings[key].value}"
+                               data-key="${key}"
+                               onchange="updateSettingValue('${key}', this.value)">
+                    </div>
+                `).join('');
+            }
+            
+            // رندر تنظیمات پیشرفت
+            const progressContainer = document.getElementById('progressSettings');
+            if (progressContainer) {
+                progressContainer.innerHTML = Object.keys(progressSettings).map(key => `
+                    <div class="setting-card">
+                        <div class="setting-title">${key.replace(/_/g, ' ')}</div>
+                        <div class="setting-description">${progressSettings[key].description || ''}</div>
+                        <input type="text" 
+                               class="form-input" 
+                               value="${progressSettings[key].value}"
+                               data-key="${key}"
+                               onchange="updateSettingValue('${key}', this.value)">
+                    </div>
+                `).join('');
+            }
+            
+            // رندر تنظیمات اقتصاد
+            const economyContainer = document.getElementById('economySettings');
+            if (economyContainer) {
+                economyContainer.innerHTML = Object.keys(economySettings).map(key => `
+                    <div class="setting-card">
+                        <div class="setting-title">${key.replace(/_/g, ' ')}</div>
+                        <div class="setting-description">${economySettings[key].description || ''}</div>
+                        <input type="text" 
+                               class="form-input" 
+                               value="${economySettings[key].value}"
+                               data-key="${key}"
+                               onchange="updateSettingValue('${key}', this.value)">
+                    </div>
+                `).join('');
+            }
+            
+            // رندر سایر تنظیمات
+            const otherContainer = document.getElementById('otherSettings');
+            if (otherContainer) {
+                otherContainer.innerHTML = Object.keys(otherSettings).map(key => `
+                    <div class="setting-card">
+                        <div class="setting-title">${key.replace(/_/g, ' ')}</div>
+                        <div class="setting-description">${otherSettings[key].description || ''}</div>
+                        <input type="text" 
+                               class="form-input" 
+                               value="${otherSettings[key].value}"
+                               data-key="${key}"
+                               onchange="updateSettingValue('${key}', this.value)">
+                    </div>
+                `).join('');
+            }
         }
         
-        const { error } = await supabaseClient
-            .from('user_missions')
-            .update(updateData)
-            .eq('user_id', userId)
-            .eq('mission_id', missionId);
-        
-        if (error) {
-            console.error('❌ Error updating user mission:', error);
-            return false;
+        function showSettingsTab(tabName) {
+            // غیرفعال کردن همه تب‌ها
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // فعال کردن تب انتخاب شده
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-settings').classList.add('active');
         }
         
-        return true;
-    } catch (error) {
-        console.error('🚨 Exception in updateUserMission:', error);
-        return false;
-    }
-}
-
-async function createMission(missionData) {
-    try {
-        const { data, error } = await supabaseClient
-            .from('missions')
-            .insert([missionData])
-            .select()
-            .single();
-        
-        if (error) {
-            console.error('❌ Error creating mission:', error);
-            return null;
+        function updateSettingValue(key, value) {
+            gameSettings[key].value = value;
         }
         
-        console.log('✅ Mission created:', data.title);
-        return data;
-    } catch (error) {
-        console.error('🚨 Exception in createMission:', error);
-        return null;
-    }
-}
-
-async function updateMission(missionId, missionData) {
-    try {
-        const { error } = await supabaseClient
-            .from('missions')
-            .update(missionData)
-            .eq('id', missionId);
-        
-        if (error) {
-            console.error('❌ Error updating mission:', error);
-            return false;
+        async function saveAllSettings() {
+            try {
+                const updates = [];
+                
+                for (const [key, setting] of Object.entries(gameSettings)) {
+                    updates.push(
+                        window.supabaseService.updateGameSetting(key, setting.value)
+                    );
+                }
+                
+                await Promise.all(updates);
+                alert('✅ تمام تنظیمات با موفقیت ذخیره شدند.');
+            } catch (error) {
+                console.error('❌ Error saving settings:', error);
+                alert('❌ خطا در ذخیره تنظیمات');
+            }
         }
         
-        console.log('✅ Mission updated:', missionId);
-        return true;
-    } catch (error) {
-        console.error('🚨 Exception in updateMission:', error);
-        return false;
-    }
-}
-
-// ============ توابع کاربران (برای ادمین) ============
-async function getAllUsers(limit = 100, offset = 0) {
-    try {
-        console.log('👥 Getting all users, limit:', limit, 'offset:', offset);
-        
-        const { data, error } = await supabaseClient
-            .from('users')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1);
-        
-        if (error) {
-            console.error('❌ Error getting all users:', error);
-            return [];
+        // ==================== SALE PLANS ====================
+        async function loadSalePlans() {
+            try {
+                salePlans = await window.supabaseService.getSalePlans();
+                renderSalePlans();
+            } catch (error) {
+                console.error('❌ Error loading sale plans:', error);
+            }
         }
         
-        return data || [];
-    } catch (error) {
-        console.error('🚨 Exception in getAllUsers:', error);
-        return [];
-    }
-}
-
-async function getUserCount() {
-    try {
-        console.log('👥 Getting user count...');
-        
-        const { count, error } = await supabaseClient
-            .from('users')
-            .select('*', { count: 'exact', head: true });
-        
-        if (error) {
-            console.error('❌ Error getting user count:', error);
-            return 0;
+        function renderSalePlans() {
+            const table = document.getElementById('salePlansTable');
+            if (!table) return;
+            
+            table.innerHTML = salePlans.map((plan, index) => {
+                const totalSod = plan.sod_amount + Math.floor(plan.sod_amount * (plan.discount / 100));
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${plan.name}</td>
+                        <td>${plan.price} USDT</td>
+                        <td>${formatNumber(plan.sod_amount)}</td>
+                        <td>${plan.discount}%</td>
+                        <td>${formatNumber(totalSod)}</td>
+                        <td>${plan.popular ? '⭐' : '—'}</td>
+                        <td>
+                            <button class="btn btn-primary" onclick="showEditPlanModal(${plan.id})" style="padding: 5px 10px;">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-danger" onclick="deletePlan(${plan.id})" style="padding: 5px 10px;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
         
-        return count || 0;
-    } catch (error) {
-        console.error('🚨 Exception in getUserCount:', error);
-        return 0;
-    }
-}
-
-async function updateUserData(userId, userData) {
-    try {
-        console.log('👥 Updating user data for:', userId);
-        
-        const { error } = await supabaseClient
-            .from('users')
-            .update(userData)
-            .eq('id', userId);
-        
-        if (error) {
-            console.error('❌ Error updating user data:', error);
-            return false;
+        function showEditPlanModal(planId) {
+            const modal = document.getElementById('editPlanModal');
+            const form = document.getElementById('planForm');
+            const deleteBtn = document.getElementById('deletePlanBtn');
+            
+            if (planId) {
+                // حالت ویرایش
+                const plan = salePlans.find(p => p.id === planId);
+                if (plan) {
+                    document.getElementById('planId').value = plan.id;
+                    document.getElementById('planName').value = plan.name;
+                    document.getElementById('planPrice').value = plan.price;
+                    document.getElementById('planSodAmount').value = plan.sod_amount;
+                    document.getElementById('planDiscount').value = plan.discount || 0;
+                    document.getElementById('planPopular').checked = plan.popular || false;
+                    document.getElementById('planFeatures').value = Array.isArray(plan.features) ? 
+                        plan.features.join('\n') : '';
+                    
+                    deleteBtn.style.display = 'inline-block';
+                    deleteBtn.setAttribute('data-plan-id', plan.id);
+                }
+            } else {
+                // حالت جدید
+                form.reset();
+                document.getElementById('planId').value = '';
+                deleteBtn.style.display = 'none';
+            }
+            
+            modal.classList.add('active');
         }
         
-        console.log('✅ User data updated:', userId);
-        return true;
-    } catch (error) {
-        console.error('🚨 Exception in updateUserData:', error);
-        return false;
-    }
-}
-
-// ============ توابع کمکی ============
-async function checkDatabaseConnection() {
-    try {
-        console.log('🔍 Testing database connection...');
-        
-        const { data, error } = await supabaseClient
-            .from('sale_plans')
-            .select('id')
-            .limit(1);
-        
-        if (error) {
-            console.error('❌ Database connection test failed:', error.message);
-            return {
-                connected: false,
-                message: error.message,
-                code: error.code
+        async function savePlan(e) {
+            e.preventDefault();
+            
+            const planId = document.getElementById('planId').value;
+            const planData = {
+                name: document.getElementById('planName').value,
+                price: parseFloat(document.getElementById('planPrice').value),
+                sod_amount: parseInt(document.getElementById('planSodAmount').value),
+                discount: parseInt(document.getElementById('planDiscount').value) || 0,
+                popular: document.getElementById('planPopular').checked,
+                features: document.getElementById('planFeatures').value.split('\n').filter(f => f.trim())
             };
+            
+            try {
+                if (planId) {
+                    // آپدیت پنل موجود
+                    await window.supabaseClient
+                        .from('sale_plans')
+                        .update(planData)
+                        .eq('id', planId);
+                } else {
+                    // ایجاد پنل جدید
+                    await window.supabaseClient
+                        .from('sale_plans')
+                        .insert([planData]);
+                }
+                
+                closeModal('editPlanModal');
+                await loadSalePlans();
+                alert('✅ پنل با موفقیت ذخیره شد.');
+            } catch (error) {
+                console.error('❌ Error saving plan:', error);
+                alert('❌ خطا در ذخیره پنل');
+            }
         }
         
-        console.log('✅ Database connection successful!');
-        return {
-            connected: true,
-            message: 'Connected to Supabase',
-            data: data
-        };
-    } catch (error) {
-        console.error('🚨 Exception checking database connection:', error);
-        return {
-            connected: false,
-            message: error.message
-        };
-    }
-}
-
-// ============ Export functions ============
-// فقط یک بار آبجکت supabaseService را تعریف کنید!
-const supabaseService = {
-    // User functions
-    getUserByEmail,
-    getUserById,
-    createUser,
-    updateUser,
-    
-    // Game functions
-    getGameData,
-    saveGameData,
-    
-    // Transaction functions
-    addTransaction,
-    getTransactions,
-    
-    // Sale plans
-    getSalePlans,
-    
-    // Game settings (برای پنل ادمین)
-    getGameSettings,
-    updateGameSetting,
-    
-    // Missions (برای پنل ادمین)
-    getMissions,
-    getUserMissions,
-    updateUserMission,
-    createMission,
-    updateMission,
-    
-    // User management (برای پنل ادمین)
-    getAllUsers,
-    getUserCount,
-    updateUserData,
-    
-    // Helper functions
-    checkDatabaseConnection,
-    
-    // Supabase client
-    client: supabaseClient
-};
-
-console.log('✅ Supabase service loaded successfully');
-
-// Export برای استفاده در سایر فایل‌ها
-window.supabaseService = supabaseService;
-window.supabaseClient = supabaseClient;
+        async function deletePlan(planId) {
+            if (!confirm('⚠️ آیا مطمئن هستید که می‌خواهید این پنل را حذف کنید؟')) {
+                return;
+            }
+            
+            try {
+                await window.supabaseClient
+                    .from('sale_plans')
+                    .delete()
+                    .eq('id', planId);
+                
+                await loadSalePlans();
+                alert('✅ پنل با موفقیت حذف شد.');
+            } catch (error) {
+                console.error('❌ Error deleting plan:', error);
+                alert('❌ خطا در حذف پنل');
+            }
+        }
+        
+        // ==================== MISSIONS ====================
+        async function loadMissions() {
+            try {
+                missions = await window.supabaseService.getMissions();
+                renderMissions();
+            } catch (error) {
+                console.error('❌ Error loading missions:', error);
+            }
+        }
+        
+        function renderMissions() {
+            const table = document.getElementById('missionsTable');
+            if (!table) return;
+            
+            table.innerHTML = missions.map((mission, index) => {
+                const requirements = JSON.parse(mission.requirements || '{}');
+                const rewards = JSON.parse(mission.rewards || '{}');
+                
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${mission.title}</td>
+                        <td>${mission.mission_type === 'daily' ? 'روزانه' : 
+                               mission.mission_type === 'weekly' ? 'هفتگی' : 'ویژه'}</td>
+                        <td>${requirements.target || 0} ${getMissionTargetUnit(requirements.type)}</td>
+                        <td>${formatNumber(rewards.sod || 0)}</td>
+                        <td>${rewards.usdt || 0}</td>
+                        <td>${mission.is_active ? '✅ فعال' : '❌ غیرفعال'}</td>
+                        <td>
+                            <button class="btn btn-primary" onclick="showEditMissionModal(${mission.id})" style="padding: 5px 10px;">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-danger" onclick="deleteMission(${mission.id})" style="padding: 5px 10px;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function getMissionTargetUnit(type) {
+            const units = {
+                'manual_mining': 'بار',
+                'auto_mining': 'دقیقه',
+                'use_boost': 'بار',
+                'buy_plans': 'عدد',
+                'total_mining': 'SOD',
+                'reach_level': 'سطح'
+            };
+            return units[type] || '';
+        }
+        
+        function showEditMissionModal(missionId) {
+            const modal = document.getElementById('editMissionModal');
+            const form = document.getElementById('missionForm');
+            const deleteBtn = document.getElementById('deleteMissionBtn');
+            
+            if (missionId) {
+                // حالت ویرایش
+                const mission = missions.find(m => m.id === missionId);
+                if (mission) {
+                    const requirements = JSON.parse(mission.requirements || '{}');
+                    const rewards = JSON.parse(mission.rewards || '{}');
+                    
+                    document.getElementById('missionId').value = mission.id;
+                    document.getElementById('missionTitle').value = mission.title;
+                    document.getElementById('missionDescription').value = mission.description || '';
+                    document.getElementById('missionType').value = mission.mission_type;
+                    document.getElementById('missionTargetType').value = requirements.type || 'manual_mining';
+                    document.getElementById('missionTarget').value = requirements.target || 0;
+                    document.getElementById('missionRewardSod').value = rewards.sod || 0;
+                    document.getElementById('missionRewardUsdt').value = rewards.usdt || 0;
+                    document.getElementById('missionRewardExp').value = rewards.exp || 0;
+                    document.getElementById('missionActive').checked = mission.is_active;
+                    
+                    deleteBtn.style.display = 'inline-block';
+                    deleteBtn.setAttribute('data-mission-id', mission.id);
+                }
+            } else {
+                // حالت جدید
+                form.reset();
+                document.getElementById('missionId').value = '';
+                deleteBtn.style.display = 'none';
+            }
+            
+            modal.classList.add('active');
+        }
+        
+        async function saveMission(e) {
+            e.preventDefault();
+            
+            const missionId = document.getElementById('missionId').value;
+            const missionData = {
+                title: document.getElementById('missionTitle').value,
+                description: document.getElementById('missionDescription').value,
+                mission_type: document.getElementById('missionType').value,
+                requirements: JSON.stringify({
+                    type: document.getElementById('missionTargetType').value,
+                    target: parseInt(document.getElementById('missionTarget').value),
+                    current: 0
+                }),
+                rewards: JSON.stringify({
+                    sod: parseInt(document.getElementById('missionRewardSod').value),
+                    usdt: parseFloat(document.getElementById('missionRewardUsdt').value),
+                    exp: parseInt(document.getElementById('missionRewardExp').value)
+                }),
+                is_active: document.getElementById('missionActive').checked,
+                order_index: missions.length + 1
+            };
+            
+            try {
+                if (missionId) {
+                    // آپدیت مأموریت موجود
+                    await window.supabaseClient
+                        .from('missions')
+                        .update(missionData)
+                        .eq('id', missionId);
+                } else {
+                    // ایجاد مأموریت جدید
+                    await window.supabaseClient
+                        .from('missions')
+                        .insert([missionData]);
+                }
+                
+                closeModal('editMissionModal');
+                await loadMissions();
+                alert('✅ مأموریت با موفقیت ذخیره شد.');
+            } catch (error) {
+                console.error('❌ Error saving mission:', error);
+                alert('❌ خطا در ذخیره مأموریت');
+            }
+        }
+        
+        async function deleteMission(missionId) {
+            if (!confirm('⚠️ آیا مطمئن هستید که می‌خواهید این مأموریت را حذف کنید؟')) {
+                return;
+            }
+            
+            try {
+                await window.supabaseClient
+                    .from('missions')
+                    .delete()
+                    .eq('id', missionId);
+                
+                await loadMissions();
+                alert('✅ مأموریت با موفقیت حذف شد.');
+            } catch (error) {
+                console.error('❌ Error deleting mission:', error);
+                alert('❌ خطا در حذف مأموریت');
+            }
+        }
+        
+        // ==================== USERS ====================
+        async function loadUsers(page = 1) {
+            try {
+                const offset = (page - 1) * usersPerPage;
+                const users = await window.supabaseService.getAllUsers(usersPerPage, offset);
+                renderUsers(users);
+                currentUserPage = page;
+            } catch (error) {
+                console.error('❌ Error loading users:', error);
+            }
+        }
+        
+        function renderUsers(users) {
+            const table = document.getElementById('usersTable');
+            if (!table) return;
+            
+            table.innerHTML = users.map((user, index) => {
+                const rowNum = (currentUserPage - 1) * usersPerPage + index + 1;
+                return `
+                    <tr>
+                        <td>${rowNum}</td>
+                        <td>${user.email}</td>
+                        <td>${user.full_name || '—'}</td>
+                        <td>${user.level || 1}</td>
+                        <td>${formatNumber(user.sod_balance || 0)}</td>
+                        <td>${(user.usdt_balance || 0).toFixed(4)}</td>
+                        <td>${new Date(user.last_login).toLocaleDateString('fa-IR')}</td>
+                        <td>
+                            <span style="color: var(--success);">✅ فعال</span>
+                        </td>
+                        <td>
+                            <button class="btn btn-primary" onclick="showEditUserModal('${user.id}')" style="padding: 5px 10px;">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-warning" onclick="suspendUser('${user.id}')" style="padding: 5px 10px;">
+                                <i class="fas fa-pause"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function loadMoreUsers() {
+            loadUsers(currentUserPage + 1);
+        }
+        
+        async function searchUsers() {
+            const searchTerm = document.getElementById('searchUsers').value.toLowerCase();
+            if (!searchTerm) {
+                await loadUsers(1);
+                return;
+            }
+            
+            try {
+                const { data: users, error } = await window.supabaseClient
+                    .from('users')
+                    .select('*')
+                    .or(`email.ilike.%${searchTerm}%,full_name.ilike.%${searchTerm}%`)
+                    .limit(50);
+                
+                if (error) throw error;
+                
+                renderUsers(users || []);
+            } catch (error) {
+                console.error('❌ Error searching users:', error);
+            }
+        }
+        
+        async function showEditUserModal(userId) {
+            try {
+                const { data: user, error } = await window.supabaseClient
+                    .from('users')
+                    .select('*')
+                    .eq('id', userId)
+                    .single();
+                
+                if (error) throw error;
+                
+                document.getElementById('userId').value = user.id;
+                document.getElementById('userEmail').value = user.email;
+                document.getElementById('userFullName').value = user.full_name || '';
+                document.getElementById('userLevel').value = user.level || 1;
+                document.getElementById('userSod').value = user.sod_balance || 0;
+                document.getElementById('userUsdt').value = user.usdt_balance || 0;
+                document.getElementById('userMiningPower').value = user.mining_power || 10;
+                document.getElementById('userStatus').value = 'active';
+                
+                document.getElementById('editUserModal').classList.add('active');
+            } catch (error) {
+                console.error('❌ Error loading user:', error);
+                alert('❌ خطا در بارگذاری اطلاعات کاربر');
+            }
+        }
+        
+        async function saveUser(e) {
+            e.preventDefault();
+            
+            const userId = document.getElementById('userId').value;
+            const userData = {
+                full_name: document.getElementById('userFullName').value,
+                level: parseInt(document.getElementById('userLevel').value),
+                sod_balance: parseInt(document.getElementById('userSod').value),
+                usdt_balance: parseFloat(document.getElementById('userUsdt').value),
+                mining_power: parseInt(document.getElementById('userMiningPower').value)
+            };
+            
+            try {
+                await window.supabaseClient
+                    .from('users')
+                    .update(userData)
+                    .eq('id', userId);
+                
+                closeModal('editUserModal');
+                await loadUsers(currentUserPage);
+                alert('✅ اطلاعات کاربر با موفقیت ذخیره شد.');
+            } catch (error) {
+                console.error('❌ Error saving user:', error);
+                alert('❌ خطا در ذخیره اطلاعات کاربر');
+            }
+        }
+        
+        async function suspendUser(userId) {
+            if (!confirm('⚠️ آیا مطمئن هستید که می‌خواهید این کاربر را تعلیق کنید؟')) {
+                return;
+            }
+            
+            try {
+                await window.supabaseClient
+                    .from('users')
+                    .update({ status: 'suspended' })
+                    .eq('id', userId);
+                
+                await loadUsers(currentUserPage);
+                alert('✅ کاربر با موفقیت تعلیق شد.');
+            } catch (error) {
+                console.error('❌ Error suspending user:', error);
+                alert('❌ خطا در تعلیق کاربر');
+            }
+        }
+        
+        function resetUserPassword() {
+            const userId = document.getElementById('userId').value;
+            const newPassword = Math.random().toString(36).slice(-8);
+            
+            alert(`رمز عبور جدید برای کاربر: ${newPassword}\nاین رمز را در اختیار کاربر قرار دهید.`);
+        }
+        
+        // ==================== TRANSACTIONS ====================
+        async function loadTransactions() {
+            try {
+                const { data: transactions, error } = await window.supabaseClient
+                    .from('transactions')
+                    .select(`
+                        *,
+                        users (email)
+                    `)
+                    .order('created_at', { ascending: false })
+                    .limit(50);
+                
+                if (error) throw error;
+                
+                renderTransactions(transactions || []);
+            } catch (error) {
+                console.error('❌ Error loading transactions:', error);
+            }
+        }
+        
+        function renderTransactions(transactions) {
+            const table = document.getElementById('transactionsTable');
+            if (!table) return;
+            
+            table.innerHTML = transactions.map((t, index) => {
+                const userEmail = t.users?.email || 'ناشناس';
+                const amountColor = t.amount >= 0 ? 'var(--success)' : 'var(--error)';
+                const amountSign = t.amount >= 0 ? '+' : '';
+                
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${userEmail}</td>
+                        <td>${getTransactionTypeText(t.type)}</td>
+                        <td style="color: ${amountColor}">${amountSign}${Math.abs(t.amount).toLocaleString()}</td>
+                        <td>${t.currency}</td>
+                        <td>${t.description || '—'}</td>
+                        <td>${new Date(t.created_at).toLocaleString('fa-IR')}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function getTransactionTypeText(type) {
+            const types = {
+                'mining': 'استخراج',
+                'purchase': 'خرید',
+                'usdt_reward': 'پاداش USDT',
+                'boost': 'افزایش قدرت',
+                'withdrawal': 'برداشت'
+            };
+            return types[type] || type;
+        }
+        
+        function filterTransactions() {
+            const filterValue = document.getElementById('transactionFilter').value;
+            if (filterValue === 'all') {
+                loadTransactions();
+            } else {
+                // فیلتر کردن بر اساس نوع
+                alert('این قابلیت در نسخه بعدی اضافه خواهد شد.');
+            }
+        }
+        
+        // ==================== REPORTS ====================
+        async function generateReport() {
+            const period = document.getElementById('reportPeriod').value;
+            const reportContent = document.getElementById('reportContent');
+            
+            reportContent.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                    <i class="fas fa-chart-line" style="font-size: 48px; margin-bottom: 20px;"></i>
+                    <h3>گزارش ${period === 'today' ? 'امروز' : 
+                                period === 'week' ? 'هفته جاری' : 
+                                period === 'month' ? 'ماه جاری' : 'همه زمان'}</h3>
+                    <p>در حال پردازش داده‌ها...</p>
+                </div>
+            `;
+            
+            // این بخش می‌تواند پیچیده باشد و نیاز به پردازش دارد
+            setTimeout(() => {
+                reportContent.innerHTML = `
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>📈 کاربران جدید</h3>
+                            <div class="value">12</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>💰 درآمد کلی</h3>
+                            <div class="value">150 USDT</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>⛏️ استخراج کل</h3>
+                            <div class="value">45M SOD</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>🎯 مأموریت‌ها</h3>
+                            <div class="value">87% تکمیل</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 30px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px;">
+                        <h3>📊 نمودار فعالیت کاربران</h3>
+                        <p style="text-align: center; padding: 50px; color: var(--text-secondary);">
+                            <i class="fas fa-chart-bar"></i> نمودارها در نسخه بعدی اضافه خواهند شد
+                        </p>
+                    </div>
+                `;
+            }, 1000);
+        }
+        
+        // ==================== UTILITY FUNCTIONS ====================
+        function formatNumber(num) {
+            num = Number(num);
+            if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return Math.floor(num).toLocaleString('fa-IR');
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+        
+        // بارگذاری اولیه کاربران و تراکنش‌ها
+        loadUsers();
+        loadTransactions();
+        generateReport();
+    </script>
+</body>
+</html>
