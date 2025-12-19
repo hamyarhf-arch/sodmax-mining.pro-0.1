@@ -12,7 +12,67 @@ class UIService {
         
         this.init();
     }
+    // در کلاس UIService، بعد از handleRegister این تابع را اضافه کنید:
+async handleLogin(e) {
+    e.preventDefault();
     
+    const email = document.getElementById('loginEmail');
+    const password = document.getElementById('loginPassword');
+    
+    if (!email || !password) {
+        this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
+        return;
+    }
+    
+    const emailValue = email.value.trim();
+    const passwordValue = password.value.trim();
+    
+    if (!emailValue || !passwordValue) {
+        this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
+        return;
+    }
+    
+    // غیرفعال کردن دکمه
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ورود...';
+    }
+    
+    try {
+        const result = await this.authService.signIn(emailValue, passwordValue);
+        
+        if (result.success) {
+            this.showNotification('✅', result.message);
+            
+            // اگر کاربر لاگین شده
+            if (this.authService.isUserVerified()) {
+                setTimeout(() => {
+                    const user = this.authService.getCurrentUser();
+                    if (user) {
+                        this.showMainApp(user);
+                    }
+                }, 1000);
+            }
+        } else {
+            this.showNotification('❌', result.error || 'خطا در ورود');
+            
+            // پاک کردن رمز عبور
+            if (password) {
+                password.value = '';
+            }
+        }
+    } catch (error) {
+        console.error('🚨 Error in handleLogin:', error);
+        this.showNotification('❌', 'خطای غیرمنتظره در ورود: ' + error.message);
+    } finally {
+        // فعال کردن دکمه
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به حساب';
+        }
+    }
+}
     async init() {
         console.log('🔄 UIService waiting for services...');
         
