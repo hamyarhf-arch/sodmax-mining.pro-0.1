@@ -1604,3 +1604,32 @@ button, .btn, .miner-core {
         grid-template-columns: 1fr;
     }
 }
+/* رفع مشکل اسکرول فرم در موبایل */
+@media (max-width: 768px) {
+    .register-container {
+        max-height: 85vh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding: 20px 15px !important;
+    }
+    
+    .register-overlay {
+        padding: 10px !important;
+        align-items: flex-start !important;
+        padding-top: 40px !important;
+    }
+    
+    #loginForm .form-input,
+    #registerForm .form-input {
+        font-size: 16px !important; /* جلوگیری از زوم در iOS */
+        padding: 16px !important;
+    }
+    
+    /* مطمئن شدن از دیده شدن همه عناصر */
+    #loginForm,
+    #registerForm {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+}
