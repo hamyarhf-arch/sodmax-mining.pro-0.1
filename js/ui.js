@@ -845,6 +845,9 @@ window.uiService = new UIService();
 document.addEventListener('DOMContentLoaded', () => {
     console.log('📄 DOM loaded, UI service active');
 });
+}
+}
+
 // اضافه کردن async اگر نیست
 async checkAdminStatus(user) {
     try {
