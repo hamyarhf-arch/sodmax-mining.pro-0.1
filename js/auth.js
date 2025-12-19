@@ -1,135 +1,151 @@
-// Authentication functions for SODmAX Pro
+// js/auth.js
 class AuthService {
     constructor() {
+        this.supabaseService = window.SupabaseService;
         this.currentUser = null;
-        this.supabase = window.supabaseClient;
-        
-        // Listen for auth changes
-        this.supabase.auth.onAuthStateChange((event, session) => {
-            console.log('🔐 Auth state changed:', event);
-            
-            if (event === 'SIGNED_IN' && session?.user) {
-                this.currentUser = session.user;
-                console.log('👤 User signed in:', session.user.email);
-            } else if (event === 'SIGNED_OUT') {
-                this.currentUser = null;
-                console.log('👤 User signed out');
-            }
-        });
+        this.loadUserFromStorage();
     }
     
-    async handleAuthStateChange() {
+    loadUserFromStorage() {
         try {
-            const { data: { user }, error } = await this.supabase.auth.getUser();
-            
-            if (error) {
-                console.error('❌ Auth error:', error);
-                return null;
+            const saved = localStorage.getItem('sodmax_user');
+            if (saved) {
+                this.currentUser = JSON.parse(saved);
+                console.log('👤 Loaded user from storage:', this.currentUser.email);
             }
-            
-            if (user) {
-                this.currentUser = user;
-                console.log('👤 User authenticated:', user.email);
-                
-                // بررسی وجود کاربر در جدول users
-                const existingUser = await window.supabaseService.getUserByEmail(user.email);
-                
-                if (!existingUser) {
-                    // ایجاد کاربر جدید
-                    const newUser = await window.supabaseService.createUser({
-                        email: user.email,
-                        fullName: user.user_metadata?.full_name || user.email.split('@')[0],
-                        referralCode: user.user_metadata?.referral_code || ''
-                    });
-                    
-                    if (newUser) {
-                        console.log('✅ New user created in database');
-                    }
-                }
-                
-                return user;
-            }
-            
-            return null;
         } catch (error) {
-            console.error('🚨 Error in handleAuthStateChange:', error);
-            return null;
+            console.warn('Failed to load user from storage:', error);
         }
     }
     
-    async signUp(email, password, fullName, referralCode = '') {
+    saveUserToStorage(user) {
         try {
-            console.log('📝 Signing up:', email);
+            localStorage.setItem('sodmax_user', JSON.stringify(user));
+            this.currentUser = user;
+            console.log('💾 Saved user to storage:', user.email);
+        } catch (error) {
+            console.error('Failed to save user to storage:', error);
+        }
+    }
+    
+    clearUserStorage() {
+        localStorage.removeItem('sodmax_user');
+        this.currentUser = null;
+        console.log('🧹 Cleared user storage');
+    }
+    
+    async register(userData) {
+        try {
+            console.log('📝 Registering user:', userData.email);
             
-            const { data, error } = await this.supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        full_name: fullName,
-                        referral_code: referralCode
-                    }
-                }
+            // ثبت در دیتابیس
+            const result = await this.supabaseService.registerUser(userData);
+            
+            if (!result.success) {
+                throw new Error(result.error || 'Registration failed');
+            }
+            
+            // ایجاد کاربر محلی
+            const localUser = {
+                isRegistered: true,
+                fullName: userData.fullName,
+                email: userData.email,
+                userId: result.userId || result.data.user_id,
+                referralCode: userData.referralCode || ''
+            };
+            
+            // ذخیره در localStorage
+            this.saveUserToStorage(localUser);
+            
+            // ایجاد داده اولیه بازی
+            await this.supabaseService.createInitialGameData(localUser.userId);
+            
+            // لاگ تراکنش هدیه
+            await this.supabaseService.addTransaction({
+                userId: localUser.userId,
+                type: 'bonus',
+                amount: 1000000,
+                currency: 'SOD',
+                description: 'سکه هدیه ثبت نام'
             });
             
-            if (error) {
-                console.error('❌ Sign up error:', error);
-                return { success: false, error: error.message };
-            }
+            console.log('✅ User registered successfully');
+            return {
+                success: true,
+                user: localUser
+            };
             
-            console.log('✅ Sign up successful');
-            return { success: true, data };
         } catch (error) {
-            console.error('🚨 Sign up exception:', error);
-            return { success: false, error: 'خطای غیرمنتظره' };
+            console.error('❌ Registration error:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     }
     
-    async signIn(email, password) {
+    async login(email) {
         try {
-            console.log('🔑 Signing in:', email);
+            console.log('🔑 Logging in:', email);
             
-            const { data, error } = await this.supabase.auth.signInWithPassword({
-                email,
-                password
-            });
+            // پیدا کردن کاربر در دیتابیس
+            const dbUser = await this.supabaseService.getUserByEmail(email);
             
-            if (error) {
-                console.error('❌ Sign in error:', error);
-                return { success: false, error: error.message };
+            if (!dbUser) {
+                throw new Error('User not found');
             }
             
-            console.log('✅ Sign in successful');
-            return { success: true, data };
+            // ایجاد کاربر محلی
+            const localUser = {
+                isRegistered: true,
+                fullName: dbUser.full_name,
+                email: dbUser.email,
+                userId: dbUser.user_id,
+                referralCode: dbUser.referral_code || ''
+            };
+            
+            // ذخیره در localStorage
+            this.saveUserToStorage(localUser);
+            
+            // آپدیت last_login
+            await this.supabaseService.supabase
+                .from('users')
+                .update({ last_login: new Date().toISOString() })
+                .eq('user_id', dbUser.user_id);
+            
+            console.log('✅ User logged in successfully');
+            return {
+                success: true,
+                user: localUser
+            };
+            
         } catch (error) {
-            console.error('🚨 Sign in exception:', error);
-            return { success: false, error: 'خطای غیرمنتظره' };
+            console.error('❌ Login error:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     }
     
-    async signOut() {
-        try {
-            const { error } = await this.supabase.auth.signOut();
-            
-            if (error) {
-                console.error('❌ Sign out error:', error);
-                return { success: false, error: error.message };
-            }
-            
-            this.currentUser = null;
-            console.log('✅ Sign out successful');
-            return { success: true };
-        } catch (error) {
-            console.error('🚨 Sign out exception:', error);
-            return { success: false, error: 'خطای غیرمنتظره' };
-        }
+    logout() {
+        this.clearUserStorage();
+        console.log('👋 User logged out');
+        return { success: true };
+    }
+    
+    isLoggedIn() {
+        return this.currentUser !== null && this.currentUser.isRegistered === true;
     }
     
     getCurrentUser() {
         return this.currentUser;
     }
+    
+    getUserId() {
+        return this.currentUser?.userId;
+    }
 }
 
-// Create global instance
-window.authService = new AuthService();
-console.log('✅ Auth service loaded');
+// ایجاد نمونه global
+window.AuthService = new AuthService();
