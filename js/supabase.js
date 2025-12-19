@@ -663,6 +663,31 @@ const supabaseService = {
 };
 
 console.log('✅ Supabase service loaded');
+// ============ Export functions ============
+const supabaseService = {
+    // ... توابع قبلی که قبلاً دارید (مثل getGameData، saveGameData و ...)
+    
+    // تابع‌های جدید مخصوص پنل ادمین - این خطوط را اضافه کنید
+    getGameSettings,       // تنظیمات بازی
+    updateGameSetting,     // بروزرسانی تنظیم
+    getMissions,           // دریافت مأموریت‌ها
+    getUserMissions,       // مأموریت‌های کاربر
+    updateUserMission,     // بروزرسانی مأموریت کاربر
+    createMission,         // ایجاد مأموریت جدید
+    updateMission,         // بروزرسانی مأموریت
+    getAllUsers,           // دریافت همه کاربران
+    getUserCount,          // شمارش کاربران
+    updateUserData,        // بروزرسانی اطلاعات کاربر
+    
+    // تابع‌های کمکی
+    checkDatabaseConnection,
+    
+    // Supabase client
+    client: supabaseClient
+};
+
+console.log('✅ Supabase service loaded successfully');
+window.supabaseService = supabaseService; // این خط باید وجود داشته باشد
 
 // Export برای استفاده در سایر فایل‌ها
 window.supabaseService = supabaseService;
