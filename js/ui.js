@@ -1,344 +1,278 @@
-// UI Service for SODmAX Pro
+// js/ui.js
 class UIService {
     constructor() {
-        this.gameService = window.gameService;
-        this.authService = window.authService;
-        this.supabaseService = window.supabaseService;
-        
-        this.isInitialized = false;
-        this.isUserVerified = false;
-        
+        this.authService = window.AuthService;
+        this.gameService = window.GameService;
+        this.supabaseService = window.SupabaseService;
         this.initializeUI();
     }
     
-    async initializeUI() {
-        if (this.isInitialized) return;
-        
-        console.log('🔄 Initializing UI...');
-        
-        // بایند کردن events اولیه
+    initializeUI() {
         this.bindEvents();
-        
-        // چک کردن وضعیت احراز هویت و ثبت‌نام
-        await this.checkAuthAndRegistration();
-        
-        // بارگذاری پنل‌های فروش
-        this.loadSalePlans();
-        
-        this.isInitialized = true;
-        console.log('✅ UI initialized');
-    }
-    
-    async checkAuthAndRegistration() {
-        console.log('🔍 Checking auth and registration...');
-        
-        const user = await this.authService.handleAuthStateChange();
-        
-        if (user && this.authService.isUserVerified()) {
-            console.log('✅ User verified and registered:', user.email);
-            await this.showMainApp(user);
-            this.isUserVerified = true;
-        } else {
-            console.log('❌ User not verified or not registered');
-            this.showLogin();
-            this.isUserVerified = false;
-        }
-    }
-    
-    onUserVerified(user) {
-        console.log('🎉 User verified callback:', user.email);
-        this.isUserVerified = true;
-        this.showMainApp(user);
-    }
-    
-    onUserSignedOut() {
-        console.log('👋 User signed out callback');
-        this.isUserVerified = false;
-        this.showLogin();
-    }
-    
-    async showMainApp(user) {
-        console.log('🚀 Showing main app for:', user.email);
-        
-        // مخفی کردن صفحه ثبت‌نام/ورود
-        const registerOverlay = document.getElementById('registerOverlay');
-        const mainContainer = document.getElementById('mainContainer');
-        
-        if (registerOverlay) {
-            registerOverlay.style.display = 'none';
-        }
-        
-        if (mainContainer) {
-            mainContainer.style.display = 'block';
-            
-            // نمایش اطلاعات کاربر
-            const userEmailElement = document.getElementById('userEmail');
-            if (userEmailElement) {
-                userEmailElement.textContent = user.email;
-            }
-            
-            // نمایش نام کاربر
-            const userNameElement = document.getElementById('userName');
-            if (userNameElement) {
-                userNameElement.textContent = user.user_metadata?.full_name || user.email.split('@')[0];
-            }
-            
-            // مقداردهی اولیه بازی
-            await this.gameService.initialize(user.id);
-            
-            // آپدیت UI
-            this.updateGameUI();
-            
-            // بارگذاری تراکنش‌ها
-            this.loadTransactions();
-            
-            // نمایش پیام خوش‌آمد
-            setTimeout(() => {
-                this.showNotification('🌟', `خوش آمدید ${user.user_metadata?.full_name || 'کاربر'}!`);
-            }, 500);
-        }
-    }
-    
-    showLogin() {
-        console.log('👤 Showing login/register screen');
-        
-        const registerOverlay = document.getElementById('registerOverlay');
-        const mainContainer = document.getElementById('mainContainer');
-        
-        if (registerOverlay) {
-            registerOverlay.style.display = 'flex';
-            
-            // ریست فرم
-            const registerForm = document.getElementById('registerForm');
-            if (registerForm) {
-                registerForm.reset();
-            }
-        }
-        
-        if (mainContainer) {
-            mainContainer.style.display = 'none';
-        }
+        this.updateUI();
+        this.checkAuthState();
     }
     
     bindEvents() {
-        console.log('🔗 Binding events...');
-        
-        // فرم ثبت‌نام/ورود
+        // ثبت نام
         const registerForm = document.getElementById('registerForm');
         if (registerForm) {
-            registerForm.addEventListener('submit', (e) => this.handleRegister(e));
-            console.log('✅ Register form bound');
+            registerForm.addEventListener('submit', (e) => this.handleRegistration(e));
         }
         
-        // دکمه استخراج
+        // استخراج
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
             minerCore.addEventListener('click', () => this.handleMining());
-            console.log('✅ Miner core bound');
         }
         
-        // دکمه دریافت USDT
+        // دریافت پاداش
         const claimBtn = document.getElementById('claimUSDTBtn');
         if (claimBtn) {
             claimBtn.addEventListener('click', () => this.handleClaimUSDT());
-            console.log('✅ Claim USDT button bound');
         }
         
-        // دکمه استخراج خودکار
+        // استخراج خودکار
         const autoMineBtn = document.getElementById('autoMineBtn');
         if (autoMineBtn) {
             autoMineBtn.addEventListener('click', () => this.toggleAutoMining());
-            console.log('✅ Auto mine button bound');
         }
         
-        // دکمه افزایش قدرت
-        const boostBtn = document.querySelector('button[onclick*="boostMining"]');
+        // افزایش قدرت
+        const boostBtn = document.querySelector('[onclick*="boostMining"]');
         if (boostBtn) {
-            boostBtn.removeAttribute('onclick');
-            boostBtn.addEventListener('click', () => this.handleBoostMining());
-            console.log('✅ Boost mining button bound');
+            boostBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.handleBoost();
+            });
         }
         
-        // دکمه خرید SOD
-        const buySodBtn = document.querySelector('button[onclick*="showSODSale"]');
-        if (buySodBtn) {
-            buySodBtn.removeAttribute('onclick');
-            buySodBtn.addEventListener('click', () => this.showSODSale());
-            console.log('✅ Buy SOD button bound');
-        }
-        
-        // دکمه خروج
-        const logoutBtn = document.getElementById('logoutBtn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', () => this.handleLogout());
-            console.log('✅ Logout button bound');
-        }
-        
-        console.log('✅ All events bound');
+        console.log('✅ UI events bound');
     }
     
-    async handleRegister(e) {
+    checkAuthState() {
+        if (this.authService.isLoggedIn()) {
+            this.hideRegister();
+            this.showNotification('👋', `خوش آمدید ${this.authService.getCurrentUser().fullName}!`);
+            
+            // بارگیری داده‌های بازی از دیتابیس
+            this.gameService.loadGameFromDatabase().then(() => {
+                this.updateUI();
+            });
+            
+            // نمایش لینک ادمین
+            const user = this.authService.getCurrentUser();
+            if (user.email === "hamyarhf@gmail.com") {
+                const adminLink = document.getElementById('adminLink');
+                if (adminLink) adminLink.style.display = 'flex';
+            }
+        } else {
+            this.showRegister();
+        }
+    }
+    
+    async handleRegistration(e) {
         e.preventDefault();
         
-        const fullName = document.getElementById('fullName');
-        const email = document.getElementById('email');
-        const referralCode = document.getElementById('referralCode');
+        const fullName = document.getElementById('fullName').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const referralCode = document.getElementById('referralCode').value.trim();
         
         if (!fullName || !email) {
             this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
             return;
         }
         
-        const fullNameValue = fullName.value.trim();
-        const emailValue = email.value.trim();
-        const referralCodeValue = referralCode ? referralCode.value.trim() : '';
+        this.showNotification('⏳', 'در حال ثبت نام...');
         
-        if (!fullNameValue || !emailValue) {
-            this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
-            return;
-        }
-        
-        // بررسی فرمت ایمیل
-        if (!this.isValidEmail(emailValue)) {
-            this.showNotification('❌', 'لطفاً یک ایمیل معتبر وارد کنید');
-            return;
-        }
-        
-        // تولید رمز عبور تصادفی
-        const password = this.generatePassword();
-        
-        this.showNotification('⏳', 'در حال ثبت‌نام...');
-        
-        // غیرفعال کردن دکمه
-        const submitBtn = e.target.querySelector('button[type="submit"]');
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ثبت‌نام...';
-        }
-        
-        try {
-            const result = await this.authService.signUp(emailValue, password, fullNameValue, referralCodeValue);
-            
-            if (result.success) {
-                this.showNotification('✅', result.message);
-                
-                // اگر کاربر بلافاصله وارد شده، برنامه اصلی را نشان بده
-                if (this.authService.isUserVerified()) {
-                    setTimeout(() => {
-                        this.showMainApp(this.authService.getCurrentUser());
-                    }, 1500);
-                } else {
-                    // اگر نیاز به تأیید ایمیل دارد، راهنمایی کن
-                    setTimeout(() => {
-                        this.showNotification('📧', 'لطفاً ایمیل خود را برای تأیید بررسی کنید.');
-                        this.showLogin(); // بازگشت به صفحه لاگین
-                    }, 2000);
-                }
-            } else {
-                this.showNotification('❌', result.error || 'خطا در ثبت‌نام');
-            }
-        } finally {
-            // فعال کردن دکمه
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> ثبت‌نام و شروع استخراج';
-            }
-        }
-    }
-    
-    async handleLogin(email, password) {
-        try {
-            this.showNotification('⏳', 'در حال ورود...');
-            
-            const result = await this.authService.signIn(email, password);
-            
-            if (result.success) {
-                this.showNotification('✅', result.message);
-                this.showMainApp(this.authService.getCurrentUser());
-            } else {
-                this.showNotification('❌', result.error || 'خطا در ورود');
-            }
-        } catch (error) {
-            this.showNotification('❌', 'خطای غیرمنتظره در ورود');
-        }
-    }
-    
-    async handleLogout() {
-        const result = await this.authService.signOut();
+        const result = await this.authService.register({
+            fullName,
+            email,
+            referralCode
+        });
         
         if (result.success) {
-            this.showNotification('👋', result.message);
-            this.showLogin();
+            this.showNotification('✅', `ثبت نام موفق! خوش آمدید ${fullName}!`);
+            
+            setTimeout(() => {
+                this.hideRegister();
+                this.updateUI();
+                this.showNotification('🎁', '۱,۰۰۰,۰۰۰ SOD هدیه دریافت کردید!');
+            }, 1500);
         } else {
-            this.showNotification('❌', result.error || 'خطا در خروج');
+            this.showNotification('❌', 'خطا در ثبت نام: ' + result.error);
         }
     }
     
-    handleMining() {
-        if (!this.authService.isUserVerified()) {
-            this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
-            this.showLogin();
+    async handleMining() {
+        if (!this.authService.isLoggedIn()) {
+            this.showNotification('❌', 'ابتدا ثبت نام کنید');
             return;
         }
         
-        const result = this.gameService.manualMine();
-        
-        // آپدیت UI
-        this.updateGameUI();
-        
-        // نمایش افکت
-        this.showMiningEffect(result.earned);
-        
-        // بررسی پاداش USDT
-        if (result.usdtResult) {
-            this.showNotification('🎉', `${result.usdtResult.usdtEarned.toFixed(4)} USDT دریافت کردید!`);
-            
-            if (result.usdtResult.levelUp) {
-                this.showNotification('⭐', `سطح شما ارتقاء یافت!`);
-            }
+        try {
+            const earned = await this.gameService.mine();
+            this.updateUI();
+            this.createMiningEffect(earned);
+            this.showNotification('⛏️', `+${this.formatNumber(earned)} SOD استخراج شد!`);
+        } catch (error) {
+            this.showNotification('❌', error.message);
         }
     }
     
-    // سایر توابع (handleClaimUSDT, handleBoostMining, toggleAutoMining, etc.) 
-    // باید همانند قبل باشند اما با چک authService.isUserVerified()
-    
-    // ============ Helper functions ============
-    
-    isValidEmail(email) {
-        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return re.test(email);
+    async handleClaimUSDT() {
+        if (!this.authService.isLoggedIn()) {
+            this.showNotification('❌', 'ابتدا ثبت نام کنید');
+            return;
+        }
+        
+        try {
+            const usdtClaimed = await this.gameService.claimUSDT();
+            this.updateUI();
+            this.showNotification('💰', `${usdtClaimed.toFixed(4)} USDT دریافت شد!`);
+        } catch (error) {
+            this.showNotification('❌', error.message);
+        }
     }
     
-    generatePassword() {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-        let password = '';
-        for (let i = 0; i < 12; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
+    async handleBoost() {
+        if (!this.authService.isLoggedIn()) {
+            this.showNotification('❌', 'ابتدا ثبت نام کنید');
+            return;
         }
-        return password;
+        
+        try {
+            await this.gameService.boost();
+            this.updateUI();
+            this.showNotification('⚡', 'قدرت استخراج ۳ برابر شد! (۳۰ دقیقه)');
+        } catch (error) {
+            this.showNotification('❌', error.message);
+        }
+    }
+    
+    toggleAutoMining() {
+        const gameData = this.gameService.getGameData();
+        
+        if (gameData.sodBalance < 1000000) {
+            this.showNotification('⚠️', 'برای استخراج خودکار حداقل ۱ میلیون SOD نیاز دارید.');
+            return;
+        }
+        
+        gameData.autoMining = !gameData.autoMining;
+        const btn = document.getElementById('autoMineBtn');
+        
+        if (gameData.autoMining) {
+            btn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
+            btn.style.background = 'var(--error)';
+            this.showNotification('🤖', 'استخراج خودکار فعال شد.');
+        } else {
+            btn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
+            btn.style.background = '';
+            this.showNotification('⏸️', 'استخراج خودکار متوقف شد.');
+        }
+    }
+    
+    // ========== UI FUNCTIONS ==========
+    updateUI() {
+        if (!this.authService.isLoggedIn()) return;
+        
+        const gameData = this.gameService.getGameData();
+        
+        // موجودی‌ها
+        document.getElementById('sodBalance').innerHTML = 
+            this.formatNumber(gameData.sodBalance) + ' <span>SOD</span>';
+        
+        document.getElementById('usdtBalance').innerHTML = 
+            gameData.usdtBalance.toFixed(4) + ' <span>USDT</span>';
+        
+        // آمار
+        document.getElementById('todayEarnings').textContent = 
+            this.formatNumber(gameData.todayEarnings) + ' SOD';
+        
+        document.getElementById('miningPower').textContent = 
+            gameData.miningPower + 'x';
+        
+        document.getElementById('clickReward').textContent = 
+            '+' + gameData.miningPower + ' SOD';
+        
+        document.getElementById('userLevel').textContent = 
+            gameData.userLevel;
+        
+        // پاداش USDT
+        document.getElementById('availableUSDT').textContent = 
+            gameData.usdtBalance.toFixed(4) + ' USDT';
+        
+        const progressPercent = (gameData.usdtProgress / 10000000) * 100;
+        document.getElementById('progressFill').style.width = progressPercent + '%';
+        
+        document.getElementById('progressText').textContent = 
+            this.formatNumber(gameData.usdtProgress) + ' / ۱۰,۰۰۰,۰۰۰ SOD (۰.۰۱ USDT)';
     }
     
     showNotification(title, message) {
         const notification = document.getElementById('notification');
-        const notificationTitle = document.getElementById('notificationTitle');
-        const notificationMessage = document.getElementById('notificationMessage');
+        const titleEl = document.getElementById('notificationTitle');
+        const messageEl = document.getElementById('notificationMessage');
         
-        if (!notification || !notificationTitle || !notificationMessage) return;
+        if (notification && titleEl && messageEl) {
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 4000);
+        }
         
-        notificationTitle.textContent = title;
-        notificationMessage.textContent = message;
-        
-        notification.classList.add('show');
-        
-        setTimeout(() => {
-            notification.classList.remove('show');
-        }, 4000);
+        console.log(`📢 ${title}: ${message}`);
     }
     
-    // بقیه توابع (updateGameUI, showMiningEffect, loadSalePlans, etc.)
-    // مانند قبل باقی می‌مانند اما با چک authService.isUserVerified()
+    formatNumber(num) {
+        if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return Math.floor(num).toLocaleString('fa-IR');
+    }
+    
+    createMiningEffect(amount) {
+        const effect = document.createElement('div');
+        effect.style.cssText = `
+            position: fixed;
+            color: var(--primary-light);
+            font-weight: 900;
+            font-size: 16px;
+            pointer-events: none;
+            z-index: 10000;
+            text-shadow: 0 0 10px var(--primary);
+            animation: miningEffect 1s ease-out forwards;
+        `;
+        
+        const core = document.getElementById('minerCore');
+        const rect = core.getBoundingClientRect();
+        effect.style.left = rect.left + rect.width / 2 + 'px';
+        effect.style.top = rect.top + rect.height / 2 + 'px';
+        effect.textContent = '+' + this.formatNumber(amount);
+        
+        document.body.appendChild(effect);
+        
+        setTimeout(() => effect.remove(), 1000);
+    }
+    
+    hideRegister() {
+        document.getElementById('registerOverlay').style.display = 'none';
+        document.getElementById('mainContainer').style.display = 'block';
+    }
+    
+    showRegister() {
+        document.getElementById('registerOverlay').style.display = 'flex';
+        document.getElementById('mainContainer').style.display = 'none';
+    }
+    
+    showSODSale() {
+        this.showNotification('🛒', 'فروشگاه SOD به زودی فعال می‌شود');
+    }
 }
 
-// ایجاد instance و export
-window.uiService = new UIService();
-console.log('✅ UI service loaded');
+// ایجاد نمونه global
+window.UIService = new UIService();
