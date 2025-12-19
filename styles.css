@@ -1309,3 +1309,50 @@ button, .btn, .miner-core {
         width: 100%;
     }
 }
+/* به انتهای فایل styles.css اضافه کنید: */
+
+/* استایل مخصوص لینک ادمین */
+#adminLink {
+    background: linear-gradient(135deg, #FF6B35 0%, #FF5722 100%) !important;
+    color: white !important;
+    position: relative;
+    animation: pulseAdmin 2s infinite;
+}
+
+#adminLink:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 5px 15px rgba(255, 107, 53, 0.4);
+}
+
+@keyframes pulseAdmin {
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(255, 107, 53, 0.7);
+    }
+    70% { 
+        box-shadow: 0 0 0 10px rgba(255, 107, 53, 0);
+    }
+}
+
+/* نشانگر ادمین در کنار ایمیل */
+.admin-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #FF6B35, #FF5722);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+/* برای موبایل */
+@media (max-width: 768px) {
+    #adminLink .nav-text {
+        display: inline;
+    }
+    
+    .admin-badge {
+        font-size: 8px;
+        padding: 1px 4px;
+    }
+}
