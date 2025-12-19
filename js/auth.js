@@ -1,3 +1,4 @@
+// js/auth.js
 // Authentication functions for SODmAX Pro
 class AuthService {
     constructor() {
@@ -10,36 +11,20 @@ class AuthService {
     }
     
     async init() {
-        await this.waitForSupabase();
+        // منتظر Supabase نمی‌شویم - اگر بود که خوب، اگر نبود با localStorage کار می‌کنیم
+        this.supabase = window.supabaseClient || null;
         
-        this.supabase = window.supabaseClient;
-        if (!this.supabase) {
-            console.error('❌ Supabase client not found');
-            return;
+        // همیشه ابتدا از localStorage چک می‌کنیم
+        this.loadUserFromStorage();
+        
+        // اگر Supabase داریم، وضعیت auth را چک می‌کنیم
+        if (this.supabase) {
+            setTimeout(() => {
+                this.handleAuthStateChange();
+            }, 1000);
         }
         
-        this.loadUserFromStorage();
         console.log('✅ AuthService initialized');
-    }
-    
-    waitForSupabase() {
-        return new Promise((resolve) => {
-            let attempts = 0;
-            const maxAttempts = 20;
-            
-            const check = () => {
-                attempts++;
-                if (window.supabaseClient) {
-                    resolve();
-                } else if (attempts < maxAttempts) {
-                    setTimeout(check, 100);
-                } else {
-                    resolve();
-                }
-            };
-            
-            check();
-        });
     }
     
     loadUserFromStorage() {
@@ -82,62 +67,40 @@ class AuthService {
                 };
             }
             
-            if (!this.supabase) {
-                return { 
-                    success: false, 
-                    error: 'سرویس احراز هویت آماده نیست' 
-                };
+            // حالت آفلاین: ذخیره در localStorage
+            const mockUser = {
+                id: 'user_' + Date.now(),
+                email: email,
+                user_metadata: {
+                    full_name: fullName,
+                    referral_code: referralCode
+                },
+                created_at: new Date().toISOString()
+            };
+            
+            this.currentUser = mockUser;
+            this.userVerified = true;
+            this.saveUserToStorage(mockUser);
+            
+            // ایجاد کاربر در دیتابیس محلی
+            if (window.supabaseService) {
+                await window.supabaseService.createUser({
+                    id: mockUser.id,
+                    email: email,
+                    fullName: fullName,
+                    referralCode: referralCode,
+                    created_at: new Date().toISOString()
+                });
             }
             
-            const { data, error } = await this.supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        full_name: fullName,
-                        referral_code: referralCode
-                    }
-                }
-            });
-            
-            if (error) {
-                console.error('❌ Sign up error:', error);
-                return { 
-                    success: false, 
-                    error: this.getErrorMessage(error) 
-                };
-            }
-            
-            console.log('✅ Sign up successful');
-            
-            // For demo - auto login
-            if (data.user) {
-                this.currentUser = data.user;
-                this.userVerified = true;
-                this.saveUserToStorage(data.user);
-                
-                // Create user in our database
-                if (window.supabaseService) {
-                    await window.supabaseService.createUser({
-                        id: data.user.id,
-                        email: data.user.email,
-                        fullName: fullName,
-                        referralCode: referralCode
-                    });
-                }
-                
-                return { 
-                    success: true, 
-                    data,
-                    message: 'ثبت‌نام موفقیت‌آمیز بود! خوش آمدید.'
-                };
-            }
+            console.log('✅ Sign up successful (offline mode)');
             
             return { 
                 success: true, 
-                data,
-                message: 'ثبت‌نام موفقیت‌آمیز بود!'
+                data: { user: mockUser },
+                message: 'ثبت‌نام موفقیت‌آمیز بود! خوش آمدید.'
             };
+            
         } catch (error) {
             console.error('🚨 Sign up exception:', error);
             return { 
@@ -151,37 +114,29 @@ class AuthService {
         try {
             console.log('🔑 Signing in:', email);
             
-            if (!this.supabase) {
-                return { 
-                    success: false, 
-                    error: 'سرویس احراز هویت آماده نیست' 
-                };
+            // حالت آفلاین: چک کردن localStorage
+            const userData = localStorage.getItem('sodmax_user');
+            if (userData) {
+                const user = JSON.parse(userData);
+                if (user.email === email) {
+                    this.currentUser = user;
+                    this.userVerified = true;
+                    console.log('✅ Sign in successful (from storage)');
+                    
+                    return { 
+                        success: true, 
+                        data: { user },
+                        message: 'ورود موفقیت‌آمیز بود!'
+                    };
+                }
             }
             
-            const { data, error } = await this.supabase.auth.signInWithPassword({
-                email,
-                password
-            });
-            
-            if (error) {
-                console.error('❌ Sign in error:', error);
-                return { 
-                    success: false, 
-                    error: this.getErrorMessage(error) 
-                };
-            }
-            
-            console.log('✅ Sign in successful');
-            
-            this.currentUser = data.user;
-            this.userVerified = true;
-            this.saveUserToStorage(data.user);
-            
+            // اگر کاربر پیدا نشد
             return { 
-                success: true, 
-                data,
-                message: 'ورود موفقیت‌آمیز بود!'
+                success: false, 
+                error: 'ایمیل یا رمز عبور نادرست است'
             };
+            
         } catch (error) {
             console.error('🚨 Sign in exception:', error);
             return { 
@@ -193,20 +148,6 @@ class AuthService {
     
     async signOut() {
         try {
-            if (!this.supabase) {
-                this.handleSignedOut();
-                return { 
-                    success: true,
-                    message: 'خروج موفقیت‌آمیز بود!'
-                };
-            }
-            
-            const { error } = await this.supabase.auth.signOut();
-            
-            if (error) {
-                console.error('❌ Sign out error:', error);
-            }
-            
             this.handleSignedOut();
             console.log('✅ Sign out successful');
             
@@ -232,22 +173,14 @@ class AuthService {
     
     async handleAuthStateChange() {
         try {
-            if (!this.supabase) {
-                return null;
-            }
+            // همیشه از localStorage چک می‌کنیم
+            const userData = localStorage.getItem('sodmax_user');
             
-            const { data: { user }, error } = await this.supabase.auth.getUser();
-            
-            if (error) {
-                console.log('👤 Auth error:', error.message);
-                return null;
-            }
-            
-            if (user) {
+            if (userData) {
+                const user = JSON.parse(userData);
                 this.currentUser = user;
                 this.userVerified = true;
-                this.saveUserToStorage(user);
-                console.log('✅ User authenticated:', user.email);
+                console.log('✅ User authenticated from storage:', user.email);
                 return user;
             }
             
@@ -267,93 +200,12 @@ class AuthService {
     }
     
     isValidEmail(email) {
+        if (!email || typeof email !== 'string') return false;
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return re.test(email);
     }
-    
-    getErrorMessage(error) {
-        const errorMessages = {
-            'User already registered': 'این ایمیل قبلاً ثبت‌نام کرده است.',
-            'Invalid login credentials': 'ایمیل یا رمز عبور نادرست است.',
-            'Email not confirmed': 'لطفاً ایمیل خود را تأیید کنید.',
-            'Weak password': 'رمز عبور بسیار ضعیف است.',
-            'User not found': 'کاربری با این ایمیل پیدا نشد.',
-            'Invalid email': 'ایمیل نامعتبر است.'
-        };
-        
-        return errorMessages[error.message] || error.message || 'خطای نامشخص';
-    }
 }
 
-// Create global instance
-// تابع تنظیم دکمه خروج
-function setupLogoutButton() {
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            
-            if (confirm('آیا مطمئن هستید که می‌خواهید از حساب خود خارج شوید؟')) {
-                await logout();
-            }
-        });
-    }
-}
-
-// تابع خروج
-async function logout() {
-    try {
-        console.log('🚪 Logging out user:', currentUser?.email);
-        
-        // 1. پاک کردن localStorage
-        Object.keys(localStorage).forEach(key => {
-            if (key.includes('sodmax') || key.includes('supabase')) {
-                localStorage.removeItem(key);
-            }
-        });
-        
-        // 2. پاک کردن sessionStorage
-        sessionStorage.clear();
-        
-        // 3. ریست متغیرها
-        currentUser = null;
-        gameData = null;
-        
-        // 4. نمایش نوتیفیکیشن
-        showNotification('👋', 'با موفقیت خارج شدید', 'success');
-        
-        // 5. نمایش فرم ثبت‌نام
-        showRegisterOverlay();
-        
-        // 6. ریفرش صفحه بعد از 1 ثانیه
-        setTimeout(() => {
-            location.reload();
-        }, 1000);
-        
-        return true;
-    } catch (error) {
-        console.error('🚨 Error logging out:', error);
-        showNotification('خطا', 'خطا در خروج از حساب', 'error');
-        return false;
-    }
-}
-
-// اضافه کردن logout به authService
-authService.logout = logout;
-authService.setupLogoutButton = setupLogoutButton;
-
-// فراخوانی setupLogoutButton وقتی DOM بارگذاری شد
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        setupLogoutButton();
-    }, 1000);
-});
+// ایجاد instance جهانی
 window.authService = new AuthService();
 console.log('✅ Auth service loaded');
-
-// Check auth state on load
-setTimeout(async () => {
-    if (window.authService && window.authService.handleAuthStateChange) {
-        await window.authService.handleAuthStateChange();
-    }
-}, 1000);
