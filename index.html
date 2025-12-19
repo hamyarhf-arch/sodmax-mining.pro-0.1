@@ -1791,8 +1791,65 @@
             };
         });
     </script>
+        <!-- JavaScript -->
+    <!-- ابتدا کتابخانه Supabase -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
+    <!-- سپس سرویس‌های ما -->
+    <script src="js/supabase.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/ui.js"></script>
+    
+    <script>
+        // Global functions for inline onclick handlers
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 SODmAX Pro loaded successfully!');
+            
+            // Set global functions for inline onclick handlers
+            window.boostMining = () => {
+                if (window.uiService && window.uiService.handleBoostMining) {
+                    window.uiService.handleBoostMining();
+                } else {
+                    console.error('UI Service not available');
+                }
+            };
+            
+            window.showSODSale = () => {
+                if (window.uiService && window.uiService.showSODSale) {
+                    window.uiService.showSODSale();
+                } else {
+                    console.error('UI Service not available');
+                }
+            };
+            
+            window.showTerms = () => {
+                if (window.uiService && window.uiService.showNotification) {
+                    window.uiService.showNotification('📄', 'قوانین و شرایط به زودی اضافه می‌شود');
+                }
+            };
+            
+            // Test all services
+            setTimeout(() => {
+                console.log('🔍 Testing services...');
+                console.log('supabaseService:', !!window.supabaseService);
+                console.log('authService:', !!window.authService);
+                console.log('gameService:', !!window.gameService);
+                console.log('uiService:', !!window.uiService);
+                
+                if (window.supabaseService && window.supabaseService.checkDatabaseConnection) {
+                    window.supabaseService.checkDatabaseConnection().then(result => {
+                        console.log('🌐 Database connection:', result.connected ? '✅ Connected' : '❌ Not connected');
+                    });
+                }
+            }, 2000);
+        });
+    </script>
 </body>
 </html>
+</body>
+</html>
+
 
 
 
