@@ -400,7 +400,242 @@ async function checkDatabaseConnection() {
         };
     }
 }
+// ============ توابع تنظیمات بازی ============
+async function getGameSettings() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('game_settings')
+            .select('*')
+            .order('setting_key');
+        
+        if (error) {
+            console.error('❌ Error getting game settings:', error);
+            return getDefaultGameSettings();
+        }
+        
+        // تبدیل به object
+        const settings = {};
+        data.forEach(setting => {
+            settings[setting.setting_key] = {
+                value: setting.setting_value,
+                description: setting.description
+            };
+        });
+        
+        console.log('✅ Game settings loaded:', Object.keys(settings).length);
+        return settings;
+    } catch (error) {
+        console.error('🚨 Error in getGameSettings:', error);
+        return getDefaultGameSettings();
+    }
+}
 
+function getDefaultGameSettings() {
+    return {
+        'mining_base_power': { value: '10', description: 'قدرت پایه استخراج' },
+        'mining_auto_cost': { value: '10000', description: 'حداقل SOD برای استخراج خودکار' },
+        'mining_auto_interval': { value: '3000', description: 'فاصله استخراج خودکار' },
+        'level_up_chance': { value: '0.03', description: 'شانس ارتقاء سطح' },
+        'usdt_conversion_rate': { value: '10000000', description: 'SOD برای دریافت USDT' }
+    };
+}
+
+async function updateGameSetting(key, value) {
+    try {
+        const { error } = await supabaseClient
+            .from('game_settings')
+            .update({ 
+                setting_value: value,
+                updated_at: new Date().toISOString()
+            })
+            .eq('setting_key', key);
+        
+        if (error) {
+            console.error('❌ Error updating setting:', error);
+            return false;
+        }
+        
+        console.log('✅ Setting updated:', key, '=', value);
+        return true;
+    } catch (error) {
+        console.error('🚨 Error in updateGameSetting:', error);
+        return false;
+    }
+}
+
+// ============ توابع مأموریت‌ها ============
+async function getMissions() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('missions')
+            .select('*')
+            .order('order_index');
+        
+        if (error) {
+            console.error('❌ Error getting missions:', error);
+            return [];
+        }
+        
+        console.log('✅ Missions loaded:', data.length);
+        return data;
+    } catch (error) {
+        console.error('🚨 Error in getMissions:', error);
+        return [];
+    }
+}
+
+async function getUserMissions(userId) {
+    try {
+        const { data, error } = await supabaseClient
+            .from('user_missions')
+            .select(`
+                *,
+                missions (*)
+            `)
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('❌ Error getting user missions:', error);
+            return [];
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('🚨 Error in getUserMissions:', error);
+        return [];
+    }
+}
+
+async function updateUserMission(userId, missionId, progress, isCompleted = false) {
+    try {
+        const updateData = {
+            progress: progress,
+            updated_at: new Date().toISOString()
+        };
+        
+        if (isCompleted) {
+            updateData.is_completed = true;
+            updateData.completed_at = new Date().toISOString();
+        }
+        
+        const { error } = await supabaseClient
+            .from('user_missions')
+            .update(updateData)
+            .eq('user_id', userId)
+            .eq('mission_id', missionId);
+        
+        if (error) {
+            console.error('❌ Error updating user mission:', error);
+            return false;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('🚨 Error in updateUserMission:', error);
+        return false;
+    }
+}
+
+async function createMission(missionData) {
+    try {
+        const { data, error } = await supabaseClient
+            .from('missions')
+            .insert([missionData])
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Error creating mission:', error);
+            return null;
+        }
+        
+        console.log('✅ Mission created:', data.title);
+        return data;
+    } catch (error) {
+        console.error('🚨 Error in createMission:', error);
+        return null;
+    }
+}
+
+async function updateMission(missionId, missionData) {
+    try {
+        const { error } = await supabaseClient
+            .from('missions')
+            .update(missionData)
+            .eq('id', missionId);
+        
+        if (error) {
+            console.error('❌ Error updating mission:', error);
+            return false;
+        }
+        
+        console.log('✅ Mission updated:', missionId);
+        return true;
+    } catch (error) {
+        console.error('🚨 Error in updateMission:', error);
+        return false;
+    }
+}
+
+// ============ توابع کاربران ============
+async function getAllUsers(limit = 100, offset = 0) {
+    try {
+        const { data, error } = await supabaseClient
+            .from('users')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+        
+        if (error) {
+            console.error('❌ Error getting all users:', error);
+            return [];
+        }
+        
+        return data || [];
+    } catch (error) {
+        console.error('🚨 Error in getAllUsers:', error);
+        return [];
+    }
+}
+
+async function getUserCount() {
+    try {
+        const { count, error } = await supabaseClient
+            .from('users')
+            .select('*', { count: 'exact', head: true });
+        
+        if (error) {
+            console.error('❌ Error getting user count:', error);
+            return 0;
+        }
+        
+        return count || 0;
+    } catch (error) {
+        console.error('🚨 Error in getUserCount:', error);
+        return 0;
+    }
+}
+
+async function updateUserData(userId, userData) {
+    try {
+        const { error } = await supabaseClient
+            .from('users')
+            .update(userData)
+            .eq('id', userId);
+        
+        if (error) {
+            console.error('❌ Error updating user data:', error);
+            return false;
+        }
+        
+        console.log('✅ User data updated:', userId);
+        return true;
+    } catch (error) {
+        console.error('🚨 Error in updateUserData:', error);
+        return false;
+    }
+}
 // ============ Export functions ============
 const supabaseService = {
     // User functions
