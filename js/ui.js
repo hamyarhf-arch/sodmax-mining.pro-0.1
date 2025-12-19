@@ -1098,3 +1098,83 @@ console.log('✅ UI service instance created');
 document.addEventListener('DOMContentLoaded', () => {
     console.log('📄 DOM loaded, UI service ready');
 });
+// در فایل ui.js، این تابع را اضافه کنید یا اگر وجود دارد، اصلاح کنید:
+async checkAdminStatus() {
+    const user = this.authService ? this.authService.getCurrentUser() : null;
+    if (!user) return false;
+    
+    console.log('🔍 Checking admin status for:', user.email);
+    
+    // لیست ادمین‌ها - می‌توانید از دیتابیس بخوانید یا ثابت تعریف کنید
+    const adminEmails = [
+        'hamyarhf@gmail.com',      // ادمین اصلی
+        'admin@sodmax.com',        // ادمین دوم
+        'test@admin.com'           // ادمین تست
+    ];
+    
+    // چک کنید آیا ایمیل کاربر در لیست ادمین‌ها است
+    const isAdmin = adminEmails.includes(user.email.toLowerCase());
+    
+    console.log('👑 Admin status:', isAdmin ? 'ADMIN' : 'USER');
+    
+    // نمایش/مخفی کردن لینک ادمین
+    const adminLink = document.getElementById('adminLink');
+    if (adminLink) {
+        adminLink.style.display = isAdmin ? 'flex' : 'none';
+        
+        // اگر ادمین است، استایل متفاوتی بده
+        if (isAdmin) {
+            adminLink.style.background = 'rgba(255, 107, 53, 0.3)'; // رنگ نارنجی برای ادمین
+            adminLink.innerHTML = `
+                <i class="fas fa-user-shield"></i>
+                <span class="nav-text">مدیریت</span>
+            `;
+        }
+    }
+    
+    return isAdmin;
+}
+
+// سپس در تابع showMainApp، این تابع را فراخوانی کنید:
+async showMainApp(user) {
+    console.log('🚀 Showing main app for:', user.email);
+    
+    // مخفی کردن صفحه ثبت‌نام/ورود
+    const registerOverlay = document.getElementById('registerOverlay');
+    const mainContainer = document.getElementById('mainContainer');
+    
+    if (registerOverlay) {
+        registerOverlay.style.display = 'none';
+    }
+    
+    if (mainContainer) {
+        mainContainer.style.display = 'block';
+        
+        // آپدیت پروفایل کاربر
+        this.updateUserProfile();
+        
+        // چک کردن وضعیت ادمین
+        await this.checkAdminStatus();
+        
+        // مقداردهی اولیه بازی
+        if (this.gameService && this.gameService.initialize) {
+            try {
+                await this.gameService.initialize(user.id);
+            } catch (error) {
+                console.error('❌ Error initializing game:', error);
+                this.showNotification('⚠️', 'خطا در بارگذاری داده‌های بازی');
+            }
+        }
+        
+        // آپدیت UI
+        this.updateGameUI();
+        
+        // بارگذاری تراکنش‌ها
+        this.loadTransactions();
+        
+        // نمایش پیام خوش‌آمد
+        setTimeout(() => {
+            this.showNotification('🌟', `خوش آمدید ${user.user_metadata?.full_name || 'کاربر'}!`);
+        }, 500);
+    }
+}
