@@ -1071,75 +1071,84 @@
     </style>
 </head>
 <body>
-    <!-- صفحه ثبت نام -->
-    <div class="register-overlay" id="registerOverlay">
-        <div class="register-container">
-            <div class="register-header">
-                <div class="register-icon">⛏️</div>
-                <h1 class="register-title">ثبت نام در SODmAX</h1>
-                <p class="register-subtitle">برای شروع استخراج و دریافت پاداش USDT ثبت نام کنید</p>
+   <!-- صفحه ثبت نام -->
+<div class="register-overlay" id="registerOverlay">
+    <div class="register-container">
+        <div class="register-header">
+            <div class="register-icon">⛏️</div>
+            <h1 class="register-title">ثبت نام در SODmAX</h1>
+            <p class="register-subtitle">برای شروع استخراج و دریافت پاداش USDT ثبت نام کنید</p>
+        </div>
+
+        <!-- فرم ثبت نام -->
+        <form id="registerForm">
+            <div class="form-group">
+                <label class="form-label">نام و نام خانوادگی</label>
+                <input type="text" class="form-input" placeholder="مثال: علی محمدی" id="fullName" required>
             </div>
 
-            <!-- فرم ثبت نام با IDهای درخواستی -->
-            <form id="registerForm">
-                <div class="form-group">
-                    <label class="form-label">نام و نام خانوادگی</label>
-                    <input type="text" class="form-input" placeholder="مثال: علی محمدی" id="fullName" required>
-                </div>
+            <div class="form-group">
+                <label class="form-label">ایمیل</label>
+                <input type="email" class="form-input" placeholder="example@gmail.com" id="email" required>
+            </div>
 
+            <div class="form-group">
+                <label class="form-label">رمز عبور</label>
+                <input type="password" class="form-input" placeholder="حداقل ۶ کاراکتر" id="password" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">تکرار رمز عبور</label>
+                <input type="password" class="form-input" placeholder="رمز عبور را تکرار کنید" id="confirmPassword" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">کد دعوت (اختیاری)</label>
+                <input type="text" class="form-input" placeholder="کد دوست خود را وارد کنید" id="referralCode">
+            </div>
+
+            <button type="submit" class="btn btn-success">
+                <i class="fas fa-user-plus"></i>
+                ایجاد حساب کاربری
+            </button>
+        </form> <!-- ✅ اینجا فرم ثبت‌نام بسته می‌شود -->
+
+        <div style="text-align: center; margin-top: 20px; color: var(--text-secondary); font-size: 12px;">
+            با ثبت نام، <a href="#" onclick="showTerms()" style="color: var(--primary-light);">قوانین و شرایط</a> را می‌پذیرید
+        </div>
+
+        <!-- فرم ورود (جدید) -->
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--glass-border);">
+            <h3 style="text-align: center; color: var(--text); margin-bottom: 20px; font-size: 18px;">
+                <i class="fas fa-sign-in-alt"></i> قبلاً حساب دارید؟
+            </h3>
+            
+            <form id="loginForm">
                 <div class="form-group">
                     <label class="form-label">ایمیل</label>
-                    <input type="email" class="form-input" placeholder="example@gmail.com" id="email" required>
+                    <input type="email" class="form-input" placeholder="example@gmail.com" id="loginEmail" required>
                 </div>
-
+                
                 <div class="form-group">
                     <label class="form-label">رمز عبور</label>
-                    <input type="password" class="form-input" placeholder="حداقل ۶ کاراکتر" id="password" required>
+                    <input type="password" class="form-input" placeholder="رمز عبور خود را وارد کنید" id="loginPassword" required>
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label">تکرار رمز عبور</label>
-                    <input type="password" class="form-input" placeholder="رمز عبور را تکرار کنید" id="confirmPassword" required>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">کد دعوت (اختیاری)</label>
-                    <input type="text" class="form-input" placeholder="کد دوست خود را وارد کنید" id="referralCode">
-                </div>
-
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-user-plus"></i>
-                    ایجاد حساب کاربری
+                
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> ورود به حساب
                 </button>
-
-                <div style="text-align: center; margin-top: 20px; color: var(--text-secondary); font-size: 12px;">
-                    با ثبت نام، <a href="#" onclick="showTerms()" style="color: var(--primary-light);">قوانین و شرایط</a> را می‌پذیرید
-                </div><!-- در بخش register-overlay، بعد از فرم ثبت‌نام، این کد را اضافه کنید -->
-<div style="margin-top: 20px; text-align: center;">
-    <h3 style="color: var(--text); margin-bottom: 15px;">👋 قبلاً ثبت‌نام کرده‌اید؟</h3>
-    
-    <form id="loginForm" style="margin-bottom: 20px;">
-        <div class="form-group">
-            <label class="form-label">ایمیل</label>
-            <input type="email" class="form-input" placeholder="example@gmail.com" id="loginEmail" required>
+            </form>
+            
+            <div style="text-align: center; margin-top: 15px;">
+                <a href="#" onclick="requestPasswordReset()" style="color: var(--primary-light); font-size: 13px;">
+                    رمز عبور را فراموش کرده‌اید؟
+                </a>
+            </div>
         </div>
+        <!-- پایان فرم ورود -->
         
-        <div class="form-group">
-            <label class="form-label">رمز عبور</label>
-            <input type="password" class="form-input" placeholder="رمز عبور خود را وارد کنید" id="loginPassword" required>
-        </div>
-        
-        <button type="submit" class="btn btn-primary">
-            <i class="fas fa-sign-in-alt"></i> ورود به حساب
-        </button>
-    </form>
-    
-    <div style="font-size: 12px; color: var(--text-secondary);">
-        فراموشی رمز عبور؟ <a href="#" onclick="resetPassword()" style="color: var(--primary-light);">اینجا کلیک کنید</a>
-    </div>
-</div>
-    </div>
-
+    </div> <!-- بسته شدن register-container -->
+</div> <!-- بسته شدن register-overlay -->
     <!-- کانتینر اصلی -->
     <div class="container" id="mainContainer" style="display: none;">
         <!-- ناوبری -->
@@ -1470,6 +1479,7 @@
     </script>
 </body>
 </html>
+
 
 
 
