@@ -1080,6 +1080,7 @@
                 <p class="register-subtitle">برای شروع استخراج و دریافت پاداش USDT ثبت نام کنید</p>
             </div>
 
+            <!-- فرم ثبت نام با IDهای درخواستی -->
             <form id="registerForm">
                 <div class="form-group">
                     <label class="form-label">نام و نام خانوادگی</label>
@@ -1092,13 +1093,23 @@
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label">رمز عبور</label>
+                    <input type="password" class="form-input" placeholder="حداقل ۶ کاراکتر" id="password" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">تکرار رمز عبور</label>
+                    <input type="password" class="form-input" placeholder="رمز عبور را تکرار کنید" id="confirmPassword" required>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">کد دعوت (اختیاری)</label>
                     <input type="text" class="form-input" placeholder="کد دوست خود را وارد کنید" id="referralCode">
                 </div>
 
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-success">
                     <i class="fas fa-user-plus"></i>
-                    ثبت نام و شروع استخراج
+                    ایجاد حساب کاربری
                 </button>
 
                 <div style="text-align: center; margin-top: 20px; color: var(--text-secondary); font-size: 12px;">
@@ -1433,4 +1444,3 @@
     </script>
 </body>
 </html>
-
