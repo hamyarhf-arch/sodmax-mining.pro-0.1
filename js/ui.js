@@ -845,3 +845,25 @@ window.uiService = new UIService();
 document.addEventListener('DOMContentLoaded', () => {
     console.log('📄 DOM loaded, UI service active');
 });
+// در ui.js مطمئن شوید این تابع وجود دارد:
+async checkAdminStatus(user) {
+    if (!user) return false;
+    
+    const adminEmails = ['hamyarhf@gmail.com'];
+    const userEmail = user.email.toLowerCase().trim();
+    const isAdmin = adminEmails.includes(userEmail);
+    
+    // نمایش/مخفی کردن لینک مدیریت
+    const adminLink = document.getElementById('adminLink');
+    if (adminLink) {
+        if (isAdmin) {
+            adminLink.style.display = 'flex';
+            // ذخیره وضعیت ادمین در localStorage
+            localStorage.setItem('sodmax_admin', 'true');
+        } else {
+            adminLink.style.display = 'none';
+        }
+    }
+    
+    return isAdmin;
+}
