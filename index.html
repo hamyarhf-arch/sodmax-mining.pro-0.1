@@ -7,9 +7,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <!-- این بخش رو حواست باشه باید دقیقاً همین باشه -->
-</head>
-    <!-- ALL STYLES INLINE -->
     <style>
         /* تمام استایل‌های شما اینجا */
         :root {
@@ -1327,7 +1324,7 @@
         </div>
     </div>
 
-            <!-- JavaScript -->
+    <!-- JavaScript -->
     <!-- ابتدا کتابخانه Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     
@@ -1338,16 +1335,22 @@
     <script src="js/ui.js"></script>
     
     <script>
-        // Global functions for inline onclick handlers
         document.addEventListener('DOMContentLoaded', () => {
             console.log('🚀 SODmAX Pro loaded successfully!');
             
-            // Set global functions for inline onclick handlers
+            // Global functions for inline onclick handlers
             window.boostMining = () => {
                 if (window.uiService && window.uiService.handleBoostMining) {
                     window.uiService.handleBoostMining();
                 } else {
-                    console.error('UI Service not available');
+                    console.log('⏳ UI Service loading...');
+                    setTimeout(() => {
+                        if (window.uiService && window.uiService.handleBoostMining) {
+                            window.uiService.handleBoostMining();
+                        } else {
+                            alert('لطفاً کمی صبر کنید... سیستم در حال بارگذاری است');
+                        }
+                    }, 1000);
                 }
             };
             
@@ -1355,40 +1358,38 @@
                 if (window.uiService && window.uiService.showSODSale) {
                     window.uiService.showSODSale();
                 } else {
-                    console.error('UI Service not available');
+                    console.log('⏳ UI Service loading...');
+                    setTimeout(() => {
+                        if (window.uiService && window.uiService.showSODSale) {
+                            window.uiService.showSODSale();
+                        } else {
+                            alert('لطفاً کمی صبر کنید... سیستم در حال بارگذاری است');
+                        }
+                    }, 1000);
                 }
             };
             
             window.showTerms = () => {
-                if (window.uiService && window.uiService.showNotification) {
-                    window.uiService.showNotification('📄', 'قوانین و شرایط به زودی اضافه می‌شود');
-                }
+                alert('📄 قوانین و شرایط به زودی اضافه می‌شود');
             };
             
-            // Test all services
+            // Test all services after loading
             setTimeout(() => {
-                console.log('🔍 Testing services...');
-                console.log('supabaseService:', !!window.supabaseService);
-                console.log('authService:', !!window.authService);
-                console.log('gameService:', !!window.gameService);
-                console.log('uiService:', !!window.uiService);
+                console.log('🔍 Services status:');
+                console.log('- supabaseService:', !!window.supabaseService);
+                console.log('- authService:', !!window.authService);
+                console.log('- gameService:', !!window.gameService);
+                console.log('- uiService:', !!window.uiService);
                 
-                if (window.supabaseService && window.supabaseService.checkDatabaseConnection) {
-                    window.supabaseService.checkDatabaseConnection().then(result => {
-                        console.log('🌐 Database connection:', result.connected ? '✅ Connected' : '❌ Not connected');
-                    });
+                // Show notification if services loaded
+                if (window.uiService && window.uiService.showNotification) {
+                    const notification = document.getElementById('notification');
+                    if (notification && !notification.classList.contains('show')) {
+                        window.uiService.showNotification('✅', 'سیستم آماده است!');
+                    }
                 }
-            }, 2000);
+            }, 3000);
         });
     </script>
 </body>
 </html>
-</body>
-</html>
-
-
-
-
-
-
-
