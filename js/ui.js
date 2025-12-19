@@ -1,4 +1,4 @@
-// js/ui.js - نسخه اصلاح شده
+// js/ui.js - نسخه کامل و اصلاح‌شده
 // UI Service for SODmAX Pro
 class UIService {
     constructor() {
@@ -21,7 +21,7 @@ class UIService {
         
         // منتظر می‌مانیم تا سرویس‌ها لود شوند
         let attempts = 0;
-        const maxAttempts = 15;
+        const maxAttempts = 20;
         
         while (attempts < maxAttempts) {
             if (window.gameService && window.authService && window.supabaseService) {
@@ -37,6 +37,8 @@ class UIService {
         
         if (!this.gameService || !this.authService) {
             console.error('❌ Services not loaded in UI');
+            // سعی می‌کنیم بعداً دوباره چک کنیم
+            setTimeout(() => this.init(), 1000);
             return;
         }
         
@@ -72,35 +74,41 @@ class UIService {
         }
         
         // ابتدا چک می‌کنیم آیا کاربر در localStorage ذخیره شده
-        const localUser = localStorage.getItem('sodmax_user');
-        if (localUser) {
-            try {
-                const user = JSON.parse(localUser);
+        try {
+            const userData = localStorage.getItem('sodmax_user');
+            if (userData) {
+                const user = JSON.parse(userData);
                 console.log('📱 Found user in localStorage:', user.email);
                 
-                // چک می‌کنیم آیا احراز هویت معتبر است
-                const authUser = await this.authService.handleAuthStateChange();
-                if (authUser && this.authService.isUserVerified()) {
-                    await this.showMainApp(authUser);
-                    this.isUserVerified = true;
-                    return;
-                }
-            } catch (error) {
-                console.error('❌ Error loading user from localStorage:', error);
+                // کاربر را تنظیم می‌کنیم
+                this.authService.currentUser = user;
+                this.authService.userVerified = true;
+                
+                // مستقیماً برنامه اصلی را نشان می‌دهیم
+                await this.showMainApp(user);
+                this.isUserVerified = true;
+                return;
             }
+        } catch (error) {
+            console.error('❌ Error loading user from localStorage:', error);
         }
         
-        // اگر کاربری در localStorage نبود یا معتبر نبود
-        const user = await this.authService.handleAuthStateChange();
-        
-        if (user && this.authService.isUserVerified()) {
-            console.log('✅ User verified and registered:', user.email);
-            await this.showMainApp(user);
-            this.isUserVerified = true;
-        } else {
-            console.log('❌ User not verified or not registered');
+        // اگر کاربری در localStorage نبود، از auth service چک می‌کنیم
+        try {
+            const user = await this.authService.handleAuthStateChange();
+            
+            if (user && this.authService.isUserVerified()) {
+                console.log('✅ User verified and registered:', user.email);
+                await this.showMainApp(user);
+                this.isUserVerified = true;
+            } else {
+                console.log('❌ User not verified or not registered');
+                this.showLogin();
+                this.isUserVerified = false;
+            }
+        } catch (error) {
+            console.error('❌ Error checking auth state:', error);
             this.showLogin();
-            this.isUserVerified = false;
         }
     }
     
@@ -139,13 +147,17 @@ class UIService {
             // نمایش نام کاربر
             const userNameElement = document.getElementById('userName');
             if (userNameElement) {
-                userNameElement.textContent = user.user_metadata?.full_name || user.email.split('@')[0];
+                const displayName = user.user_metadata?.full_name || 
+                                   (user.user_metadata && user.user_metadata.full_name) || 
+                                   user.email.split('@')[0];
+                userNameElement.textContent = displayName;
             }
             
             // مقداردهی اولیه بازی
             if (this.gameService && this.gameService.initialize) {
                 try {
                     await this.gameService.initialize(user.id);
+                    console.log('✅ Game initialized successfully');
                 } catch (error) {
                     console.error('❌ Error initializing game:', error);
                     this.showNotification('⚠️', 'خطا در بارگذاری داده‌های بازی');
@@ -160,7 +172,8 @@ class UIService {
             
             // نمایش پیام خوش‌آمد
             setTimeout(() => {
-                this.showNotification('🌟', `خوش آمدید ${user.user_metadata?.full_name || 'کاربر'}!`);
+                const name = user.user_metadata?.full_name || user.email.split('@')[0];
+                this.showNotification('🌟', `خوش آمدید ${name}!`);
             }, 500);
         }
     }
@@ -174,7 +187,7 @@ class UIService {
         if (registerOverlay) {
             registerOverlay.style.display = 'flex';
             
-            // ریست فرم
+            // ریست فرم‌ها
             const loginForm = document.getElementById('loginForm');
             const registerForm = document.getElementById('registerForm');
             if (loginForm) loginForm.reset();
@@ -197,15 +210,19 @@ class UIService {
         // فرم ورود
         const loginForm = document.getElementById('loginForm');
         if (loginForm) {
+            console.log('✅ Found login form');
             loginForm.addEventListener('submit', (e) => this.handleLoginSubmit(e));
-            console.log('✅ Login form bound');
+        } else {
+            console.warn('⚠️ Login form not found!');
         }
         
         // فرم ثبت‌نام
         const registerForm = document.getElementById('registerForm');
         if (registerForm) {
+            console.log('✅ Found register form');
             registerForm.addEventListener('submit', (e) => this.handleRegister(e));
-            console.log('✅ Register form bound');
+        } else {
+            console.warn('⚠️ Register form not found!');
         }
         
         // دکمه استخراج
@@ -235,6 +252,16 @@ class UIService {
             boostBtn.removeAttribute('onclick');
             boostBtn.addEventListener('click', () => this.handleBoostMining());
             console.log('✅ Boost mining button bound');
+        } else {
+            // پیدا کردن دکمه با متن
+            const allButtons = document.querySelectorAll('button');
+            allButtons.forEach(btn => {
+                if (btn.textContent.includes('افزایش قدرت') || btn.innerHTML.includes('افزایش قدرت')) {
+                    btn.removeAttribute('onclick');
+                    btn.addEventListener('click', () => this.handleBoostMining());
+                    console.log('✅ Boost mining button found by text');
+                }
+            });
         }
         
         // دکمه خرید SOD
@@ -243,6 +270,16 @@ class UIService {
             buySodBtn.removeAttribute('onclick');
             buySodBtn.addEventListener('click', () => this.showSODSale());
             console.log('✅ Buy SOD button bound');
+        } else {
+            // پیدا کردن دکمه خرید SOD
+            const allButtons = document.querySelectorAll('button');
+            allButtons.forEach(btn => {
+                if (btn.textContent.includes('خرید SOD') || btn.innerHTML.includes('خرید SOD')) {
+                    btn.removeAttribute('onclick');
+                    btn.addEventListener('click', () => this.showSODSale());
+                    console.log('✅ Buy SOD button found by text');
+                }
+            });
         }
         
         // دکمه خروج
@@ -257,17 +294,21 @@ class UIService {
     
     async handleLoginSubmit(e) {
         e.preventDefault();
+        console.log('🔑 Login form submitted');
         
-        const email = document.getElementById('loginEmail');
-        const password = document.getElementById('loginPassword');
+        const emailInput = document.getElementById('loginEmail');
+        const passwordInput = document.getElementById('loginPassword');
         
-        if (!email || !password) {
-            this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
+        if (!emailInput || !passwordInput) {
+            console.error('❌ Login form inputs not found');
+            this.showNotification('❌', 'خطا در فرم ورود');
             return;
         }
         
-        const emailValue = email.value.trim();
-        const passwordValue = password.value.trim();
+        const emailValue = emailInput.value ? emailInput.value.trim() : '';
+        const passwordValue = passwordInput.value ? passwordInput.value : '';
+        
+        console.log('📧 Login attempt for:', emailValue);
         
         if (!emailValue || !passwordValue) {
             this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
@@ -281,6 +322,8 @@ class UIService {
         
         // غیرفعال کردن دکمه
         const submitBtn = e.target.querySelector('button[type="submit"]');
+        const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+        
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ورود...';
@@ -291,14 +334,12 @@ class UIService {
                 throw new Error('سرویس احراز هویت در دسترس نیست');
             }
             
-            console.log('🔑 Attempting login for:', emailValue);
-            
             const result = await this.authService.signIn(emailValue, passwordValue);
             
             console.log('🔑 Login result:', result);
             
             if (result.success) {
-                this.showNotification('✅', result.message);
+                this.showNotification('✅', result.message || 'ورود موفقیت‌آمیز بود!');
                 
                 // اگر کاربر لاگین شده
                 if (this.authService.isUserVerified()) {
@@ -313,49 +354,105 @@ class UIService {
                 this.showNotification('❌', result.error || 'خطا در ورود');
                 
                 // پاک کردن رمز عبور
-                if (password) {
-                    password.value = '';
+                if (passwordInput) {
+                    passwordInput.value = '';
                 }
             }
         } catch (error) {
             console.error('🚨 Error in handleLoginSubmit:', error);
-            this.showNotification('❌', 'خطای غیرمنتظره در ورود: ' + error.message);
+            this.showNotification('❌', 'خطای غیرمنتظره در ورود: ' + (error.message || 'خطای نامشخص'));
         } finally {
             // فعال کردن دکمه
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به حساب';
+                submitBtn.innerHTML = originalBtnText || '<i class="fas fa-sign-in-alt"></i> ورود به حساب';
             }
         }
     }
     
     async handleRegister(e) {
         e.preventDefault();
+        console.log('📝 Register form submitted');
         
-        const fullName = document.getElementById('fullName');
-        const email = document.getElementById('email');
-        const password = document.getElementById('password');
-        const confirmPassword = document.getElementById('confirmPassword');
-        const referralCode = document.getElementById('referralCode');
+        // پیدا کردن المان‌های فرم با بررسی وجود آن‌ها
+        const fullNameInput = document.getElementById('fullName');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const confirmPasswordInput = document.getElementById('confirmPassword');
+        const referralCodeInput = document.getElementById('referralCode');
         
-        // اعتبارسنجی
-        if (!fullName.value.trim() || !email.value.trim() || !password.value) {
+        // دیباگ: چک کردن المان‌ها
+        console.log('🔍 Form elements found:', {
+            fullName: !!fullNameInput,
+            email: !!emailInput,
+            password: !!passwordInput,
+            confirmPassword: !!confirmPasswordInput,
+            referralCode: !!referralCodeInput
+        });
+        
+        // اعتبارسنجی وجود المان‌ها
+        if (!fullNameInput || !emailInput || !passwordInput || !confirmPasswordInput) {
+            console.error('❌ Some form elements are missing!');
+            this.showNotification('❌', 'خطا در فرم ثبت‌نام. لطفاً صفحه را refresh کنید.');
+            return;
+        }
+        
+        const fullNameValue = fullNameInput.value ? fullNameInput.value.trim() : '';
+        const emailValue = emailInput.value ? emailInput.value.trim() : '';
+        const passwordValue = passwordInput.value ? passwordInput.value : '';
+        const confirmPasswordValue = confirmPasswordInput.value ? confirmPasswordInput.value : '';
+        const referralCodeValue = referralCodeInput ? (referralCodeInput.value ? referralCodeInput.value.trim() : '') : '';
+        
+        console.log('📝 Form values:', {
+            fullName: fullNameValue,
+            email: emailValue,
+            passwordLength: passwordValue.length,
+            confirmPasswordLength: confirmPasswordValue.length,
+            referralCode: referralCodeValue
+        });
+        
+        // اعتبارسنجی مقادیر
+        if (!fullNameValue || !emailValue || !passwordValue || !confirmPasswordValue) {
             this.showNotification('❌', 'لطفاً تمام فیلدهای ضروری را پر کنید');
             return;
         }
         
-        if (password.value !== confirmPassword.value) {
+        if (passwordValue !== confirmPasswordValue) {
             this.showNotification('❌', 'رمز عبور و تکرار آن مطابقت ندارند');
+            
+            // هایلایت کردن فیلدهای رمز عبور
+            if (passwordInput) passwordInput.style.borderColor = 'var(--error)';
+            if (confirmPasswordInput) confirmPasswordInput.style.borderColor = 'var(--error)';
+            
+            setTimeout(() => {
+                if (passwordInput) passwordInput.style.borderColor = '';
+                if (confirmPasswordInput) confirmPasswordInput.style.borderColor = '';
+            }, 3000);
+            
             return;
         }
         
-        if (password.value.length < 6) {
+        if (passwordValue.length < 6) {
             this.showNotification('❌', 'رمز عبور باید حداقل ۶ کاراکتر باشد');
+            
+            if (passwordInput) passwordInput.style.borderColor = 'var(--error)';
+            
+            setTimeout(() => {
+                if (passwordInput) passwordInput.style.borderColor = '';
+            }, 3000);
+            
             return;
         }
         
-        if (!this.isValidEmail(email.value)) {
+        if (!this.isValidEmail(emailValue)) {
             this.showNotification('❌', 'لطفاً یک ایمیل معتبر وارد کنید');
+            
+            if (emailInput) emailInput.style.borderColor = 'var(--error)';
+            
+            setTimeout(() => {
+                if (emailInput) emailInput.style.borderColor = '';
+            }, 3000);
+            
             return;
         }
         
@@ -363,35 +460,54 @@ class UIService {
         
         // غیرفعال کردن دکمه
         const submitBtn = e.target.querySelector('button[type="submit"]');
+        const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+        
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ثبت‌نام...';
         }
         
         try {
+            console.log('📤 Sending registration request...');
+            
+            // چک کردن auth service
+            if (!this.authService) {
+                console.error('❌ Auth service is null!');
+                throw new Error('سرویس احراز هویت در دسترس نیست');
+            }
+            
             const result = await this.authService.signUp(
-                email.value.trim(),
-                password.value,
-                fullName.value.trim(),
-                referralCode ? referralCode.value.trim() : ''
+                emailValue,
+                passwordValue,
+                fullNameValue,
+                referralCodeValue
             );
             
+            console.log('📥 Registration response:', result);
+            
             if (result.success) {
-                this.showNotification('✅', result.message);
+                this.showNotification('✅', result.message || 'ثبت‌نام موفقیت‌آمیز بود!');
                 
                 // پاک کردن فرم
-                e.target.reset();
+                if (fullNameInput) fullNameInput.value = '';
+                if (emailInput) emailInput.value = '';
+                if (passwordInput) passwordInput.value = '';
+                if (confirmPasswordInput) confirmPasswordInput.value = '';
+                if (referralCodeInput) referralCodeInput.value = '';
                 
                 // اگر کاربر بلافاصله لاگین شد
                 if (this.authService.isUserVerified()) {
+                    console.log('🎉 User verified immediately');
                     setTimeout(() => {
                         const user = this.authService.getCurrentUser();
                         if (user) {
+                            console.log('🚀 Showing main app for:', user.email);
                             this.showMainApp(user);
                         }
                     }, 1500);
-                } else if (result.message.includes('ایمیل')) {
+                } else if (result.message && result.message.includes('ایمیل')) {
                     // اگر نیاز به تأیید ایمیل دارد
+                    console.log('📧 Email confirmation required');
                     setTimeout(() => {
                         this.showNotification('📧', 'لطفاً ایمیل خود را برای تأیید بررسی کنید.');
                         // برگشت به صفحه لاگین
@@ -399,23 +515,48 @@ class UIService {
                             window.switchAuthTab('login');
                         }
                     }, 2000);
+                } else {
+                    // حالت دیگر - کاربر لاگین شده است
+                    console.log('👤 User should be logged in');
+                    setTimeout(() => {
+                        const user = this.authService.getCurrentUser();
+                        if (user) {
+                            this.showMainApp(user);
+                        } else {
+                            this.showNotification('ℹ️', 'لطفاً با ایمیل و رمز عبور وارد شوید');
+                            if (window.switchAuthTab) {
+                                window.switchAuthTab('login');
+                            }
+                        }
+                    }, 2000);
                 }
             } else {
+                console.error('❌ Registration failed:', result.error);
                 this.showNotification('❌', result.error || 'خطا در ثبت‌نام');
+                
+                // هایلایت کردن فیلد ایمیل در صورت خطای تکراری
+                if (result.error && result.error.includes('قبلاً')) {
+                    if (emailInput) emailInput.style.borderColor = 'var(--error)';
+                    setTimeout(() => {
+                        if (emailInput) emailInput.style.borderColor = '';
+                    }, 5000);
+                }
             }
         } catch (error) {
             console.error('🚨 Error in handleRegister:', error);
-            this.showNotification('❌', 'خطای غیرمنتظره در ثبت‌نام');
+            this.showNotification('❌', 'خطای غیرمنتظره در ثبت‌نام: ' + (error.message || 'خطای نامشخص'));
         } finally {
             // فعال کردن دکمه
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> ایجاد حساب کاربری';
+                submitBtn.innerHTML = originalBtnText || '<i class="fas fa-user-plus"></i> ایجاد حساب کاربری';
             }
         }
     }
     
     async handleLogout() {
+        console.log('👋 Logout requested');
+        
         if (!this.authService) {
             this.showNotification('❌', 'سرویس احراز هویت در دسترس نیست');
             return;
@@ -427,10 +568,22 @@ class UIService {
             this.autoMiningInterval = null;
         }
         
+        // توقف auto mining در game service
+        if (this.gameService && this.gameService.getGameData) {
+            const gameData = this.gameService.getGameData();
+            if (gameData.autoMining && this.gameService.toggleAutoMining) {
+                try {
+                    await this.gameService.toggleAutoMining();
+                } catch (error) {
+                    console.warn('⚠️ Error stopping auto mining:', error);
+                }
+            }
+        }
+        
         const result = await this.authService.signOut();
         
         if (result.success) {
-            this.showNotification('👋', result.message);
+            this.showNotification('👋', result.message || 'خروج موفقیت‌آمیز بود!');
             this.showLogin();
         } else {
             this.showNotification('❌', result.error || 'خطا در خروج');
@@ -438,6 +591,8 @@ class UIService {
     }
     
     async handleMining() {
+        console.log('⛏️ Mining clicked');
+        
         if (!this.authService || !this.authService.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
@@ -466,7 +621,8 @@ class UIService {
                 this.showNotification('🎉', `${result.usdtResult.usdtEarned.toFixed(4)} USDT دریافت کردید!`);
                 
                 if (result.usdtResult.levelUp) {
-                    this.showNotification('⭐', `سطح شما ارتقاء یافت! سطح ${this.gameService.getUserLevel()}`);
+                    const newLevel = this.gameService.getUserLevel ? this.gameService.getUserLevel() : 1;
+                    this.showNotification('⭐', `سطح شما ارتقاء یافت! سطح ${newLevel}`);
                 }
             }
             
@@ -477,6 +633,8 @@ class UIService {
     }
     
     async handleClaimUSDT() {
+        console.log('💰 Claim USDT clicked');
+        
         if (!this.authService || !this.authService.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
@@ -499,6 +657,8 @@ class UIService {
     }
     
     async handleBoostMining() {
+        console.log('⚡ Boost mining clicked');
+        
         if (!this.authService || !this.authService.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
@@ -521,6 +681,8 @@ class UIService {
     }
     
     async toggleAutoMining() {
+        console.log('🤖 Toggle auto mining clicked');
+        
         if (!this.authService || !this.authService.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
@@ -532,8 +694,13 @@ class UIService {
             return;
         }
         
-        const gameData = this.gameService.getGameData();
+        const gameData = this.gameService.getGameData ? this.gameService.getGameData() : null;
         const autoMineBtn = document.getElementById('autoMineBtn');
+        
+        if (!gameData) {
+            this.showNotification('❌', 'داده‌های بازی در دسترس نیست');
+            return;
+        }
         
         try {
             if (!gameData.autoMining) {
@@ -545,14 +712,18 @@ class UIService {
                     return;
                 }
                 
-                autoMineBtn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
-                autoMineBtn.classList.remove('btn-primary');
-                autoMineBtn.classList.add('btn-warning');
+                if (autoMineBtn) {
+                    autoMineBtn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
+                    autoMineBtn.classList.remove('btn-primary');
+                    autoMineBtn.classList.add('btn-warning');
+                }
                 
                 this.showNotification('🤖', 'استخراج خودکار فعال شد!');
                 
                 // تغییر وضعیت در game service
-                await this.gameService.toggleAutoMining();
+                if (this.gameService.toggleAutoMining) {
+                    await this.gameService.toggleAutoMining();
+                }
                 
                 // شروع انیمیشن استخراج خودکار
                 this.startAutoMiningAnimation();
@@ -562,14 +733,18 @@ class UIService {
                 
             } else {
                 // غیرفعال کردن استخراج خودکار
-                autoMineBtn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
-                autoMineBtn.classList.remove('btn-warning');
-                autoMineBtn.classList.add('btn-primary');
+                if (autoMineBtn) {
+                    autoMineBtn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
+                    autoMineBtn.classList.remove('btn-warning');
+                    autoMineBtn.classList.add('btn-primary');
+                }
                 
                 this.showNotification('⏸️', 'استخراج خودکار متوقف شد.');
                 
                 // توقف در game service
-                await this.gameService.toggleAutoMining();
+                if (this.gameService.toggleAutoMining) {
+                    await this.gameService.toggleAutoMining();
+                }
                 
                 // توقف انیمیشن
                 this.stopAutoMiningAnimation();
@@ -628,6 +803,7 @@ class UIService {
     // ============ Helper functions ============
     
     isValidEmail(email) {
+        if (!email || typeof email !== 'string') return false;
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return re.test(email);
     }
@@ -646,7 +822,12 @@ class UIService {
         const notificationTitle = document.getElementById('notificationTitle');
         const notificationMessage = document.getElementById('notificationMessage');
         
-        if (!notification || !notificationTitle || !notificationMessage) return;
+        if (!notification || !notificationTitle || !notificationMessage) {
+            console.warn('⚠️ Notification elements not found');
+            // Fallback: استفاده از alert
+            alert(`${title}: ${message}`);
+            return;
+        }
         
         notificationTitle.textContent = title;
         notificationMessage.textContent = message;
@@ -659,10 +840,16 @@ class UIService {
     }
     
     async updateGameUI() {
-        if (!this.gameService) return;
+        if (!this.gameService) {
+            console.warn('⚠️ Game service not available for UI update');
+            return;
+        }
         
-        const gameData = this.gameService.getGameData();
-        if (!gameData) return;
+        const gameData = this.gameService.getGameData ? this.gameService.getGameData() : null;
+        if (!gameData) {
+            console.warn('⚠️ Game data not available for UI update');
+            return;
+        }
         
         // فرمت‌دهنده اعداد
         const formatNumber = (num) => {
@@ -743,34 +930,33 @@ class UIService {
     
     showMiningEffect(amount) {
         // ابتدا مطمئن شویم انیمیشن در CSS وجود دارد
-        const style = document.createElement('style');
-        style.id = 'mining-effect-styles';
-        style.textContent = `
-            @keyframes miningEffect {
-                0% {
-                    opacity: 1;
-                    transform: translate(0, 0) scale(1);
+        const styleId = 'mining-effect-styles';
+        if (!document.getElementById(styleId)) {
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                @keyframes miningEffect {
+                    0% {
+                        opacity: 1;
+                        transform: translate(0, 0) scale(1);
+                    }
+                    100% {
+                        opacity: 0;
+                        transform: translate(0, -100px) scale(1.5);
+                    }
                 }
-                100% {
-                    opacity: 0;
-                    transform: translate(0, -100px) scale(1.5);
+                
+                .mining-effect {
+                    position: fixed;
+                    font-weight: 900;
+                    font-size: 24px;
+                    pointer-events: none;
+                    z-index: 10000;
+                    text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary);
+                    animation: miningEffect 1.5s ease-out forwards;
+                    user-select: none;
                 }
-            }
-            
-            .mining-effect {
-                position: fixed;
-                font-weight: 900;
-                font-size: 24px;
-                pointer-events: none;
-                z-index: 10000;
-                text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary);
-                animation: miningEffect 1.5s ease-out forwards;
-                user-select: none;
-            }
-        `;
-        
-        // اگر هنوز اضافه نشده، اضافه کن
-        if (!document.getElementById('mining-effect-styles')) {
+            `;
             document.head.appendChild(style);
         }
         
@@ -834,28 +1020,28 @@ class UIService {
         minerCore.classList.add('auto-mining');
         
         // اضافه کردن استایل انیمیشن
-        const style = document.createElement('style');
-        style.id = 'auto-mining-styles';
-        style.textContent = `
-            .auto-mining {
-                animation: pulseGlow 1.5s infinite alternate;
-            }
-            
-            @keyframes pulseGlow {
-                0% {
-                    box-shadow: inset 0 0 40px rgba(0, 102, 255, 0.2), 
-                              0 10px 30px rgba(0, 0, 0, 0.5),
-                              0 0 20px rgba(0, 102, 255, 0.3);
+        const styleId = 'auto-mining-styles';
+        if (!document.getElementById(styleId)) {
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                .auto-mining {
+                    animation: pulseGlow 1.5s infinite alternate !important;
                 }
-                100% {
-                    box-shadow: inset 0 0 60px rgba(0, 102, 255, 0.4), 
-                              0 15px 40px rgba(0, 102, 255, 0.3),
-                              0 0 40px rgba(0, 212, 170, 0.5);
+                
+                @keyframes pulseGlow {
+                    0% {
+                        box-shadow: inset 0 0 40px rgba(0, 102, 255, 0.2), 
+                                  0 10px 30px rgba(0, 0, 0, 0.5),
+                                  0 0 20px rgba(0, 102, 255, 0.3);
+                    }
+                    100% {
+                        box-shadow: inset 0 0 60px rgba(0, 102, 255, 0.4), 
+                                  0 15px 40px rgba(0, 102, 255, 0.3),
+                                  0 0 40px rgba(0, 212, 170, 0.5);
+                    }
                 }
-            }
-        `;
-        
-        if (!document.getElementById('auto-mining-styles')) {
+            `;
             document.head.appendChild(style);
         }
     }
@@ -878,13 +1064,16 @@ class UIService {
         console.log('🛒 Loading sale plans...');
         
         const salePlansGrid = document.getElementById('salePlansGrid');
-        if (!salePlansGrid) return;
+        if (!salePlansGrid) {
+            console.warn('⚠️ Sale plans grid not found');
+            return;
+        }
         
         try {
             let plans = [];
             
             // سعی می‌کنیم از دیتابیس بگیریم
-            if (this.supabaseService) {
+            if (this.supabaseService && this.supabaseService.getSalePlans) {
                 plans = await this.supabaseService.getSalePlans();
             }
             
@@ -944,7 +1133,7 @@ class UIService {
                     ${plan.discount > 0 ? `<div style="position: absolute; top: 16px; right: 16px;"><span class="discount-badge">${plan.discount}% تخفیف</span></div>` : ''}
                     
                     <div class="sale-plan-header">
-                        <h3 class="sale-plan-name">${plan.name}</h3>
+                        <h3 class="sale-plan-name">${plan.name || `پنل ${plan.id}`}</h3>
                         <div class="sale-plan-price">${plan.price} <span>USDT</span></div>
                         <div class="sod-amount">${this.formatNumber(totalSOD)} SOD</div>
                     </div>
@@ -970,6 +1159,8 @@ class UIService {
     }
     
     async buySODPlan(planId) {
+        console.log('🛒 Buying SOD plan:', planId);
+        
         if (!this.authService || !this.authService.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
@@ -997,14 +1188,17 @@ class UIService {
         console.log('📋 Loading transactions...');
         
         const transactionsList = document.getElementById('transactionsList');
-        if (!transactionsList) return;
+        if (!transactionsList) {
+            console.warn('⚠️ Transactions list not found');
+            return;
+        }
         
         try {
             let transactions = [];
             
             // سعی می‌کنیم از دیتابیس بگیریم
             const user = this.authService ? this.authService.getCurrentUser() : null;
-            if (user && this.supabaseService) {
+            if (user && this.supabaseService && this.supabaseService.getTransactions) {
                 transactions = await this.supabaseService.getTransactions(user.id, 10);
             }
             
@@ -1039,6 +1233,7 @@ class UIService {
                 const icon = this.getTransactionIcon(transaction.type);
                 const amountColor = transaction.amount >= 0 ? 'var(--success)' : 'var(--error)';
                 const amountSign = transaction.amount >= 0 ? '+' : '';
+                const date = transaction.created_at ? new Date(transaction.created_at).toLocaleString('fa-IR') : 'نامشخص';
                 
                 row.innerHTML = `
                     <div class="transaction-type">
@@ -1046,7 +1241,7 @@ class UIService {
                         <div style="flex: 1;">
                             <div style="font-weight: bold;">${this.getTransactionTypeText(transaction.type)}</div>
                             <div style="color: var(--text-secondary); font-size: 12px;">
-                                ${new Date(transaction.created_at).toLocaleString('fa-IR')}
+                                ${date}
                             </div>
                         </div>
                         <div style="font-weight: bold; color: ${amountColor};">
@@ -1071,7 +1266,9 @@ class UIService {
             'usdt_reward': '💰',
             'purchase': '🛒',
             'boost': '⚡',
-            'withdrawal': '💳'
+            'withdrawal': '💳',
+            'deposit': '💵',
+            'reward': '🎁'
         };
         
         return icons[type] || '📝';
@@ -1083,7 +1280,9 @@ class UIService {
             'usdt_reward': 'پاداش USDT',
             'purchase': 'خرید پنل',
             'boost': 'افزایش قدرت',
-            'withdrawal': 'برداشت USDT'
+            'withdrawal': 'برداشت USDT',
+            'deposit': 'واریز',
+            'reward': 'پاداش'
         };
         
         return texts[type] || type;
