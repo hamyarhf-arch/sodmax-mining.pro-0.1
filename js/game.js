@@ -1,89 +1,102 @@
-// Game Service for SODmAX Pro
+// js/game.js
 class GameService {
     constructor() {
-        this.gameData = {
-            sodBalance: 1000000, // هدیه ثبت نام
+        this.supabaseService = window.SupabaseService;
+        this.authService = window.AuthService;
+        this.gameData = this.loadGameFromStorage();
+        this.autoSaveInterval = null;
+        this.startAutoSave();
+    }
+    
+    loadGameFromStorage() {
+        try {
+            const saved = localStorage.getItem('sodmax_game');
+            if (saved) {
+                const data = JSON.parse(saved);
+                console.log('🎮 Loaded game from storage');
+                return data;
+            }
+        } catch (error) {
+            console.warn('Failed to load game from storage:', error);
+        }
+        
+        // داده‌های پیش‌فرض
+        return {
+            sodBalance: 0,
             usdtBalance: 0,
             todayEarnings: 0,
             miningPower: 10,
             userLevel: 1,
-            usdtProgress: 1000000,
-            totalMined: 0,
+            usdtProgress: 0,
+            autoMining: false,
             boostActive: false,
-            autoMining: false
+            totalMined: 0
         };
-        
-        this.userId = null;
-        this.autoSaveInterval = null;
-        this.autoMiningInterval = null;
     }
     
-    async initialize(userId) {
-        this.userId = userId;
-        
-        // بارگذاری داده‌ها از دیتابیس
-        await this.loadFromDatabase();
-        
-        // شروع ذخیره خودکار
-        this.startAutoSave();
-        
-        console.log('🎮 Game service initialized for user:', userId);
-    }
-    
-    async loadFromDatabase() {
-        if (!this.userId) return;
-        
+    saveGameToStorage() {
         try {
-            const savedData = await window.supabaseService.getGameData(this.userId);
-            
-            if (savedData) {
-                this.gameData = {
-                    ...this.gameData,
-                    sodBalance: savedData.sodBalance || 1000000,
-                    usdtBalance: savedData.usdtBalance || 0,
-                    miningPower: savedData.miningPower || 10,
-                    userLevel: savedData.userLevel || 1,
-                    usdtProgress: savedData.usdtProgress || 1000000,
-                    totalMined: savedData.totalMined || 0
-                };
-                
-                console.log('📂 Game data loaded from database');
-            }
+            localStorage.setItem('sodmax_game', JSON.stringify(this.gameData));
         } catch (error) {
-            console.error('❌ Error loading game data:', error);
+            console.error('Failed to save game to storage:', error);
         }
     }
     
-    async saveToDatabase() {
-        if (!this.userId) return false;
+    async saveGameToDatabase() {
+        const userId = this.authService.getUserId();
+        if (!userId) return false;
         
         try {
-            const success = await window.supabaseService.saveGameData(this.userId, this.gameData);
-            
+            const success = await this.supabaseService.saveGameData(userId, this.gameData);
             if (success) {
-                console.log('💾 Game data saved to database');
-            } else {
-                console.log('📱 Game data saved to local storage');
+                console.log('💾 Game saved to database');
             }
-            
             return success;
         } catch (error) {
-            console.error('❌ Error saving game data:', error);
+            console.warn('Failed to save game to database:', error);
             return false;
         }
     }
     
-    startAutoSave() {
-        if (this.autoSaveInterval) {
-            clearInterval(this.autoSaveInterval);
+    async loadGameFromDatabase() {
+        const userId = this.authService.getUserId();
+        if (!userId) return false;
+        
+        try {
+            const data = await this.supabaseService.getGameData(userId);
+            if (data) {
+                this.gameData = {
+                    sodBalance: data.sod_balance || 1000000,
+                    usdtBalance: data.usdt_balance || 0,
+                    todayEarnings: data.today_earnings || 0,
+                    miningPower: data.mining_power || 10,
+                    userLevel: data.user_level || 1,
+                    usdtProgress: data.usdt_progress || 1000000,
+                    autoMining: false,
+                    boostActive: false,
+                    totalMined: data.total_mined || 0
+                };
+                
+                this.saveGameToStorage();
+                console.log('✅ Game loaded from database');
+                return true;
+            }
+        } catch (error) {
+            console.warn('Failed to load game from database:', error);
         }
         
-        // ذخیره خودکار هر 30 ثانیه
+        return false;
+    }
+    
+    startAutoSave() {
+        // هر 30 ثانیه ذخیره خودکار
         this.autoSaveInterval = setInterval(() => {
-            this.saveToDatabase();
+            if (this.authService.isLoggedIn()) {
+                this.saveGameToStorage();
+                this.saveGameToDatabase();
+                console.log('⏰ Auto-saved game');
+            }
         }, 30000);
-        
-        console.log('⏰ Auto-save started');
     }
     
     stopAutoSave() {
@@ -93,11 +106,16 @@ class GameService {
         }
     }
     
-    // ============ منطق بازی ============
-    
-    manualMine() {
+    // ========== GAME LOGIC ==========
+    async mine() {
+        if (!this.authService.isLoggedIn()) {
+            throw new Error('User not logged in');
+        }
+        
+        const userId = this.authService.getUserId();
         let earned = this.gameData.miningPower;
         
+        // اعمال بوست
         if (this.gameData.boostActive) {
             earned *= 3;
         }
@@ -108,165 +126,151 @@ class GameService {
         this.gameData.todayEarnings += earned;
         this.gameData.usdtProgress += earned;
         
-        // بررسی پاداش USDT
-        const usdtResult = this.checkUSDT();
+        // ذخیره
+        this.saveGameToStorage();
+        await this.saveGameToDatabase();
         
-        return { earned, usdtResult };
+        // لاگ تراکنش
+        await this.supabaseService.addTransaction({
+            userId: userId,
+            type: 'mining',
+            amount: earned,
+            currency: 'SOD',
+            description: 'استخراج دستی'
+        });
+        
+        // بررسی پاداش USDT
+        await this.checkUSDT();
+        
+        // شانس ارتقاء سطح
+        if (Math.random() > 0.85) {
+            await this.levelUp();
+        }
+        
+        return earned;
     }
     
-    checkUSDT() {
+    async checkUSDT() {
         if (this.gameData.usdtProgress >= 10000000) {
             const usdtEarned = 0.01;
             
             this.gameData.usdtBalance += usdtEarned;
             this.gameData.usdtProgress -= 10000000;
             
-            // شانس ارتقاء سطح
-            let levelUp = false;
-            if (Math.random() > 0.85) {
-                this.gameData.userLevel++;
-                this.gameData.miningPower = 10 * this.gameData.userLevel;
-                levelUp = true;
-            }
+            // ذخیره
+            this.saveGameToStorage();
+            await this.saveGameToDatabase();
             
-            return { usdtEarned, levelUp };
-        }
-        
-        return null;
-    }
-    
-    buySODPlan(plan) {
-        const bonusSOD = Math.floor(plan.sod_amount * (plan.discount / 100));
-        const totalSOD = plan.sod_amount + bonusSOD;
-        
-        this.gameData.sodBalance += totalSOD;
-        
-        // ثبت تراکنش
-        if (this.userId) {
-            window.supabaseService.addTransaction(this.userId, {
-                type: 'purchase',
-                amount: totalSOD,
-                currency: 'SOD',
-                description: `خرید پنل ${plan.name}`
+            // لاگ تراکنش
+            const userId = this.authService.getUserId();
+            await this.supabaseService.addTransaction({
+                userId: userId,
+                type: 'usdt_reward',
+                amount: usdtEarned,
+                currency: 'USDT',
+                description: 'پاداش استخراج'
             });
+            
+            return usdtEarned;
         }
         
-        return totalSOD;
+        return 0;
     }
     
-    claimUSDT() {
+    async levelUp() {
+        this.gameData.userLevel++;
+        this.gameData.miningPower = 10 * this.gameData.userLevel;
+        
+        this.saveGameToStorage();
+        await this.saveGameToDatabase();
+        
+        return this.gameData.userLevel;
+    }
+    
+    async boost() {
+        if (this.gameData.sodBalance < 5000) {
+            throw new Error('Not enough SOD');
+        }
+        
+        this.gameData.sodBalance -= 5000;
+        this.gameData.boostActive = true;
+        this.gameData.miningPower *= 3;
+        
+        this.saveGameToStorage();
+        await this.saveGameToDatabase();
+        
+        // غیرفعال کردن بوست بعد از 30 دقیقه
+        setTimeout(() => {
+            this.gameData.boostActive = false;
+            this.gameData.miningPower = 10 * this.gameData.userLevel;
+            this.saveGameToStorage();
+            this.saveGameToDatabase();
+            console.log('⏰ Boost expired');
+        }, 30 * 60 * 1000);
+        
+        return true;
+    }
+    
+    async claimUSDT() {
         if (this.gameData.usdtBalance <= 0) {
-            return { success: false, error: 'موجودی USDT کافی نیست' };
+            throw new Error('No USDT to claim');
         }
         
         const usdtToClaim = this.gameData.usdtBalance;
         const sodNeeded = usdtToClaim * 1000000000;
         
         if (this.gameData.sodBalance < sodNeeded) {
-            return { 
-                success: false, 
-                error: `موجودی SOD کافی نیست. نیاز: ${this.formatNumber(sodNeeded)} SOD`
-            };
+            throw new Error('Not enough SOD for conversion');
         }
         
         this.gameData.usdtBalance = 0;
         this.gameData.sodBalance -= sodNeeded;
         
-        // ثبت تراکنش
-        if (this.userId) {
-            window.supabaseService.addTransaction(this.userId, {
-                type: 'withdrawal',
-                amount: usdtToClaim,
-                currency: 'USDT',
-                description: 'دریافت پاداش USDT'
-            });
-        }
+        this.saveGameToStorage();
+        await this.saveGameToDatabase();
         
-        return { 
-            success: true, 
-            usdtClaimed: usdtToClaim,
-            sodUsed: sodNeeded
-        };
+        // لاگ تراکنش
+        const userId = this.authService.getUserId();
+        await this.supabaseService.addTransaction({
+            userId: userId,
+            type: 'withdrawal',
+            amount: usdtToClaim,
+            currency: 'USDT',
+            description: 'برداشت USDT'
+        });
+        
+        return usdtToClaim;
     }
     
-    boostMining() {
-        const cost = 5000;
-        
-        if (this.gameData.sodBalance < cost) {
-            return false;
-        }
-        
-        this.gameData.sodBalance -= cost;
-        this.gameData.boostActive = true;
-        this.gameData.miningPower *= 3;
-        
-        // توقف بوست بعد از 30 دقیقه
-        setTimeout(() => {
-            this.gameData.boostActive = false;
-            this.gameData.miningPower = 10 * this.gameData.userLevel;
-        }, 30 * 60 * 1000);
-        
-        return true;
-    }
-    
-    startAutoMining() {
-        if (this.autoMiningInterval) {
-            clearInterval(this.autoMiningInterval);
-        }
-        
-        this.gameData.autoMining = true;
-        this.autoMiningInterval = setInterval(() => {
-            this.manualMine();
-        }, 1000);
-        
-        return true;
-    }
-    
-    stopAutoMining() {
-        if (this.autoMiningInterval) {
-            clearInterval(this.autoMiningInterval);
-            this.autoMiningInterval = null;
-        }
-        
-        this.gameData.autoMining = false;
-        return true;
-    }
-    
-    // ============ Helper functions ============
-    
-    formatNumber(num) {
-        if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
-        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-        return Math.floor(num).toLocaleString('fa-IR');
-    }
-    
+    // ========== GETTERS ==========
     getGameData() {
-        return { ...this.gameData };
+        return { ...this.gameData }; // Return copy
     }
     
-    setGameData(newData) {
-        this.gameData = { ...this.gameData, ...newData };
+    getSODBalance() {
+        return this.gameData.sodBalance;
     }
     
-    reset() {
-        this.gameData = {
-            sodBalance: 1000000,
-            usdtBalance: 0,
-            todayEarnings: 0,
-            miningPower: 10,
-            userLevel: 1,
-            usdtProgress: 1000000,
-            totalMined: 0,
-            boostActive: false,
-            autoMining: false
-        };
-        
-        this.stopAutoSave();
-        this.stopAutoMining();
+    getUSDTBalance() {
+        return this.gameData.usdtBalance;
+    }
+    
+    getMiningPower() {
+        return this.gameData.miningPower;
+    }
+    
+    getUserLevel() {
+        return this.gameData.userLevel;
+    }
+    
+    getUSDTProgress() {
+        return this.gameData.usdtProgress;
+    }
+    
+    getTodayEarnings() {
+        return this.gameData.todayEarnings;
     }
 }
 
-// Create global instance
-window.gameService = new GameService();
-console.log('✅ Game service loaded');
+// ایجاد نمونه global
+window.GameService = new GameService();
