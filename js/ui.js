@@ -1,29 +1,24 @@
-// js/ui.js - نسخه اصلاح شده
-// UI Service for SODmAX Pro
+// js/ui.js - نسخه فقط Supabase
 class UIService {
     constructor() {
-        console.log('🎨 UIService initializing...');
+        console.log('🎨 UIService (Supabase-Only) initializing...');
         
         this.gameService = null;
         this.authService = null;
         this.supabaseService = null;
-        
-        this.isInitialized = false;
-        this.isUserVerified = false;
         this.autoMiningInterval = null;
+        this.isInitialized = false;
+        this.userId = null;
         
-        // منتظر می‌مانیم تا سرویس‌ها لود شوند
         this.init();
     }
     
     async init() {
-        console.log('🔄 Waiting for services to load...');
+        console.log('🔄 UIService waiting for services...');
         
-        // منتظر می‌مانیم تا سرویس‌ها لود شوند
+        // منتظر سرویس‌ها
         let attempts = 0;
-        const maxAttempts = 15;
-        
-        while (attempts < maxAttempts) {
+        while (attempts < 25) {
             if (window.gameService && window.authService && window.supabaseService) {
                 this.gameService = window.gameService;
                 this.authService = window.authService;
@@ -35,91 +30,39 @@ class UIService {
             attempts++;
         }
         
-        if (!this.gameService || !this.authService) {
-            console.error('❌ Services not loaded in UI');
+        if (!this.gameService) {
+            console.error('❌ GameService not available');
             return;
         }
         
-        console.log('🎨 UIService starting...');
-        this.initializeUI();
-    }
-    
-    async initializeUI() {
-        if (this.isInitialized) return;
-        
-        console.log('🔄 Initializing UI...');
-        
-        // بایند کردن events اولیه
+        // بایند کردن events
         this.bindEvents();
         
-        // چک کردن وضعیت احراز هویت و ثبت‌نام
-        await this.checkAuthAndRegistration();
-        
-        // بارگذاری پنل‌های فروش
-        this.loadSalePlans();
+        // چک کردن وضعیت auth
+        await this.checkAuthState();
         
         this.isInitialized = true;
-        console.log('✅ UI initialized');
+        console.log('✅ UIService ready (Supabase-Only)');
     }
     
-    async checkAuthAndRegistration() {
-        console.log('🔍 Checking auth and registration...');
-        
-        if (!this.authService) {
-            console.error('❌ Auth service not available');
-            this.showLogin();
-            return;
-        }
-        
-        // ابتدا چک می‌کنیم آیا کاربر در localStorage ذخیره شده
-        const localUser = localStorage.getItem('sodmax_user');
-        if (localUser) {
-            try {
-                const user = JSON.parse(localUser);
-                console.log('📱 Found user in localStorage:', user.email);
-                
-                // چک می‌کنیم آیا احراز هویت معتبر است
-                const authUser = await this.authService.handleAuthStateChange();
-                if (authUser && this.authService.isUserVerified()) {
-                    await this.showMainApp(authUser);
-                    this.isUserVerified = true;
-                    return;
-                }
-            } catch (error) {
-                console.error('❌ Error loading user from localStorage:', error);
-            }
-        }
-        
-        // اگر کاربری در localStorage نبود یا معتبر نبود
-        const user = await this.authService.handleAuthStateChange();
+    // 1. چک کردن وضعیت احراز هویت
+    async checkAuthState() {
+        const user = this.authService?.getCurrentUser();
         
         if (user && this.authService.isUserVerified()) {
-            console.log('✅ User verified and registered:', user.email);
+            console.log('✅ User is authenticated:', user.email);
+            this.userId = user.id;
             await this.showMainApp(user);
-            this.isUserVerified = true;
         } else {
-            console.log('❌ User not verified or not registered');
+            console.log('❌ User not authenticated, showing login');
             this.showLogin();
-            this.isUserVerified = false;
         }
     }
     
-    onUserVerified(user) {
-        console.log('🎉 User verified callback:', user.email);
-        this.isUserVerified = true;
-        this.showMainApp(user);
-    }
-    
-    onUserSignedOut() {
-        console.log('👋 User signed out callback');
-        this.isUserVerified = false;
-        this.showLogin();
-    }
-    
+    // 2. نمایش اپلیکیشن اصلی
     async showMainApp(user) {
         console.log('🚀 Showing main app for:', user.email);
         
-        // مخفی کردن صفحه ثبت‌نام/ورود
         const registerOverlay = document.getElementById('registerOverlay');
         const mainContainer = document.getElementById('mainContainer');
         
@@ -130,24 +73,26 @@ class UIService {
         if (mainContainer) {
             mainContainer.style.display = 'block';
             
-            // آپدیت پروفایل کاربر
-            await this.updateUserProfile();
-            
             // مقداردهی اولیه بازی
-            if (this.gameService && this.gameService.initialize) {
-                try {
-                    await this.gameService.initialize(user.id);
-                } catch (error) {
-                    console.error('❌ Error initializing game:', error);
-                    this.showNotification('⚠️', 'خطا در بارگذاری داده‌های بازی');
-                }
+            try {
+                await this.gameService.initialize(user.id);
+                this.userId = user.id;
+            } catch (error) {
+                console.error('❌ Game initialization error:', error);
+                this.showNotification('⚠️', 'خطا در بارگذاری داده‌های بازی');
             }
             
             // آپدیت UI
             this.updateGameUI();
             
+            // بارگذاری پنل‌های فروش
+            this.loadSalePlans();
+            
             // بارگذاری تراکنش‌ها
             this.loadTransactions();
+            
+            // چک کردن وضعیت ادمین
+            this.checkAdminStatus(user);
             
             // نمایش پیام خوش‌آمد
             setTimeout(() => {
@@ -156,6 +101,7 @@ class UIService {
         }
     }
     
+    // 3. نمایش صفحه لاگین/ثبت‌نام
     showLogin() {
         console.log('👤 Showing login/register screen');
         
@@ -164,33 +110,24 @@ class UIService {
         
         if (registerOverlay) {
             registerOverlay.style.display = 'flex';
-            
-            // ریست فرم
-            const loginForm = document.getElementById('loginForm');
-            const registerForm = document.getElementById('registerForm');
-            if (loginForm) loginForm.reset();
-            if (registerForm) registerForm.reset();
-            
-            // نمایش تب لاگین به صورت پیش‌فرض
-            if (window.switchAuthTab) {
-                window.switchAuthTab('login');
-            }
         }
         
         if (mainContainer) {
             mainContainer.style.display = 'none';
         }
+        
+        // توقف همه فعالیت‌های بازی
+        if (this.gameService) {
+            this.gameService.stopAllActivities();
+        }
+        
+        // توقف UI auto mining
+        this.stopUIAutoMining();
     }
     
+    // 4. بایند کردن events
     bindEvents() {
         console.log('🔗 Binding events...');
-        
-        // فرم ورود
-        const loginForm = document.getElementById('loginForm');
-        if (loginForm) {
-            loginForm.addEventListener('submit', (e) => this.handleLoginSubmit(e));
-            console.log('✅ Login form bound');
-        }
         
         // فرم ثبت‌نام
         const registerForm = document.getElementById('registerForm');
@@ -199,18 +136,11 @@ class UIService {
             console.log('✅ Register form bound');
         }
         
-        // دکمه استخراج
+        // ماینر core (کلیک استخراج)
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
             minerCore.addEventListener('click', () => this.handleMining());
             console.log('✅ Miner core bound');
-        }
-        
-        // دکمه دریافت USDT
-        const claimBtn = document.getElementById('claimUSDTBtn');
-        if (claimBtn) {
-            claimBtn.addEventListener('click', () => this.handleClaimUSDT());
-            console.log('✅ Claim USDT button bound');
         }
         
         // دکمه استخراج خودکار
@@ -221,20 +151,27 @@ class UIService {
         }
         
         // دکمه افزایش قدرت
-        const boostBtn = document.querySelector('button[onclick*="boostMining"]');
-        if (boostBtn) {
-            boostBtn.removeAttribute('onclick');
-            boostBtn.addEventListener('click', () => this.handleBoostMining());
-            console.log('✅ Boost mining button bound');
+        const boostBtns = document.querySelectorAll('[onclick*="boostMining"], [onclick*="handleBoostMining"]');
+        boostBtns.forEach(btn => {
+            btn.removeAttribute('onclick');
+            btn.addEventListener('click', () => this.handleBoostMining());
+        });
+        console.log('✅ Boost mining buttons bound');
+        
+        // دکمه دریافت USDT
+        const claimBtn = document.getElementById('claimUSDTBtn');
+        if (claimBtn) {
+            claimBtn.addEventListener('click', () => this.handleClaimUSDT());
+            console.log('✅ Claim USDT button bound');
         }
         
         // دکمه خرید SOD
-        const buySodBtn = document.querySelector('button[onclick*="showSODSale"]');
-        if (buySodBtn) {
-            buySodBtn.removeAttribute('onclick');
-            buySodBtn.addEventListener('click', () => this.showSODSale());
-            console.log('✅ Buy SOD button bound');
-        }
+        const buyBtns = document.querySelectorAll('[onclick*="showSODSale"], [onclick*="SODSale"]');
+        buyBtns.forEach(btn => {
+            btn.removeAttribute('onclick');
+            btn.addEventListener('click', () => this.showSODSale());
+        });
+        console.log('✅ Buy SOD buttons bound');
         
         // دکمه خروج
         const logoutBtn = document.getElementById('logoutBtn');
@@ -246,80 +183,7 @@ class UIService {
         console.log('✅ All events bound');
     }
     
-    async handleLoginSubmit(e) {
-        e.preventDefault();
-        
-        const email = document.getElementById('loginEmail');
-        const password = document.getElementById('loginPassword');
-        
-        if (!email || !password) {
-            this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
-            return;
-        }
-        
-        const emailValue = email.value.trim();
-        const passwordValue = password.value.trim();
-        
-        if (!emailValue || !passwordValue) {
-            this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
-            return;
-        }
-        
-        if (!this.isValidEmail(emailValue)) {
-            this.showNotification('❌', 'لطفاً یک ایمیل معتبر وارد کنید');
-            return;
-        }
-        
-        // غیرفعال کردن دکمه
-        const submitBtn = e.target.querySelector('button[type="submit"]');
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ورود...';
-        }
-        
-        try {
-            if (!this.authService) {
-                throw new Error('سرویس احراز هویت در دسترس نیست');
-            }
-            
-            console.log('🔑 Attempting login for:', emailValue);
-            
-            const result = await this.authService.signIn(emailValue, passwordValue);
-            
-            console.log('🔑 Login result:', result);
-            
-            if (result.success) {
-                this.showNotification('✅', result.message);
-                
-                // اگر کاربر لاگین شده
-                if (this.authService.isUserVerified()) {
-                    setTimeout(() => {
-                        const user = this.authService.getCurrentUser();
-                        if (user) {
-                            this.showMainApp(user);
-                        }
-                    }, 1000);
-                }
-            } else {
-                this.showNotification('❌', result.error || 'خطا در ورود');
-                
-                // پاک کردن رمز عبور
-                if (password) {
-                    password.value = '';
-                }
-            }
-        } catch (error) {
-            console.error('🚨 Error in handleLoginSubmit:', error);
-            this.showNotification('❌', 'خطای غیرمنتظره در ورود: ' + error.message);
-        } finally {
-            // فعال کردن دکمه
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به حساب';
-            }
-        }
-    }
-    
+    // 5. هندل ثبت‌نام
     async handleRegister(e) {
         e.preventDefault();
         
@@ -330,7 +194,7 @@ class UIService {
         const referralCode = document.getElementById('referralCode');
         
         // اعتبارسنجی
-        if (!fullName.value.trim() || !email.value.trim() || !password.value) {
+        if (!fullName?.value.trim() || !email?.value.trim() || !password?.value) {
             this.showNotification('❌', 'لطفاً تمام فیلدهای ضروری را پر کنید');
             return;
         }
@@ -350,8 +214,6 @@ class UIService {
             return;
         }
         
-        this.showNotification('⏳', 'در حال ایجاد حساب کاربری...');
-        
         // غیرفعال کردن دکمه
         const submitBtn = e.target.querySelector('button[type="submit"]');
         if (submitBtn) {
@@ -364,13 +226,11 @@ class UIService {
                 email.value.trim(),
                 password.value,
                 fullName.value.trim(),
-                referralCode ? referralCode.value.trim() : ''
+                referralCode?.value.trim() || ''
             );
             
             if (result.success) {
                 this.showNotification('✅', result.message);
-                
-                // پاک کردن فرم
                 e.target.reset();
                 
                 // اگر کاربر بلافاصله لاگین شد
@@ -381,21 +241,12 @@ class UIService {
                             this.showMainApp(user);
                         }
                     }, 1500);
-                } else if (result.message.includes('ایمیل')) {
-                    // اگر نیاز به تأیید ایمیل دارد
-                    setTimeout(() => {
-                        this.showNotification('📧', 'لطفاً ایمیل خود را برای تأیید بررسی کنید.');
-                        // برگشت به صفحه لاگین
-                        if (window.switchAuthTab) {
-                            window.switchAuthTab('login');
-                        }
-                    }, 2000);
                 }
             } else {
                 this.showNotification('❌', result.error || 'خطا در ثبت‌نام');
             }
         } catch (error) {
-            console.error('🚨 Error in handleRegister:', error);
+            console.error('🚨 Register error:', error);
             this.showNotification('❌', 'خطای غیرمنتظره در ثبت‌نام');
         } finally {
             // فعال کردن دکمه
@@ -406,30 +257,9 @@ class UIService {
         }
     }
     
-    async handleLogout() {
-        if (!this.authService) {
-            this.showNotification('❌', 'سرویس احراز هویت در دسترس نیست');
-            return;
-        }
-        
-        // توقف استخراج خودکار
-        if (this.autoMiningInterval) {
-            clearInterval(this.autoMiningInterval);
-            this.autoMiningInterval = null;
-        }
-        
-        const result = await this.authService.signOut();
-        
-        if (result.success) {
-            this.showNotification('👋', result.message);
-            this.showLogin();
-        } else {
-            this.showNotification('❌', result.error || 'خطا در خروج');
-        }
-    }
-    
+    // 6. هندل استخراج
     async handleMining() {
-        if (!this.authService || !this.authService.isUserVerified()) {
+        if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
             return;
@@ -446,36 +276,44 @@ class UIService {
             // آپدیت UI
             this.updateGameUI();
             
-            // نمایش افکت (بعد از کمی تأخیر برای روان‌تر شدن)
-            setTimeout(() => {
-                this.showMiningEffect(result.earned);
-                this.pulseMinerCore();
-            }, 100);
+            // نمایش افکت استخراج
+            this.showMiningEffect(result.earned);
+            this.pulseMinerCore();
             
-            // بررسی پاداش USDT
-            if (result.usdtResult) {
-                this.showNotification('🎉', `${result.usdtResult.usdtEarned.toFixed(4)} USDT دریافت کردید!`);
-                
-                if (result.usdtResult.levelUp) {
-                    this.showNotification('⭐', `سطح شما ارتقاء یافت! سطح ${this.gameService.getUserLevel()}`);
-                }
+            // نمایش پاداش USDT اگر بود
+            if (result.usdtReward) {
+                this.showNotification('🎉', `${result.usdtReward.usdtEarned.toFixed(4)} USDT دریافت کردید!`);
             }
             
         } catch (error) {
-            console.error('❌ Error in mining:', error);
+            console.error('❌ Mining error:', error);
             this.showNotification('❌', error.message || 'خطا در استخراج');
         }
     }
     
-    async handleClaimUSDT() {
-        if (!this.authService || !this.authService.isUserVerified()) {
+    // 7. هندل افزایش قدرت
+    async handleBoostMining() {
+        if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
             return;
         }
         
-        if (!this.gameService) {
-            this.showNotification('❌', 'سرویس بازی در دسترس نیست');
+        try {
+            await this.gameService.boostMining();
+            this.showNotification('⚡', 'قدرت استخراج ۳ برابر شد! (۳۰ دقیقه)');
+            this.updateGameUI();
+        } catch (error) {
+            console.error('❌ Boost error:', error);
+            this.showNotification('❌', error.message || 'خطا در افزایش قدرت');
+        }
+    }
+    
+    // 8. هندل دریافت USDT
+    async handleClaimUSDT() {
+        if (!this.authService?.isUserVerified()) {
+            this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
+            this.showLogin();
             return;
         }
         
@@ -484,123 +322,57 @@ class UIService {
             this.showNotification('✅', `${usdtClaimed.toFixed(4)} USDT دریافت شد!`);
             this.updateGameUI();
         } catch (error) {
-            console.error('❌ Error claiming USDT:', error);
+            console.error('❌ Claim USDT error:', error);
             this.showNotification('❌', error.message || 'خطا در دریافت USDT');
         }
     }
     
-    async handleBoostMining() {
-        if (!this.authService || !this.authService.isUserVerified()) {
-            this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
-            this.showLogin();
-            return;
-        }
-        
-        if (!this.gameService) {
-            this.showNotification('❌', 'سرویس بازی در دسترس نیست');
-            return;
-        }
-        
-        try {
-            await this.gameService.handleBoostMining();
-            this.showNotification('⚡', 'قدرت استخراج ۳ برابر شد! (۳۰ دقیقه)');
-            this.updateGameUI();
-        } catch (error) {
-            console.error('❌ Error boosting mining:', error);
-            this.showNotification('❌', error.message || 'خطا در افزایش قدرت');
-        }
-    }
-    
+    // 9. toggle استخراج خودکار
     async toggleAutoMining() {
-        if (!this.authService || !this.authService.isUserVerified()) {
+        if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
             return;
         }
         
-        if (!this.gameService) {
-            this.showNotification('❌', 'سرویس بازی در دسترس نیست');
-            return;
-        }
-        
-        const gameData = this.gameService.getGameData();
         const autoMineBtn = document.getElementById('autoMineBtn');
+        const isAutoMining = this.gameService.isAutoMining();
         
         try {
-            if (!gameData.autoMining) {
-                // فعال کردن استخراج خودکار
-                
-                // چک کردن موجودی
-                if (gameData.sodBalance < 10000) {
-                    this.showNotification('⚠️', 'برای استخراج خودکار حداقل ۱۰,۰۰۰ SOD نیاز دارید.');
-                    return;
-                }
-                
+            if (!isAutoMining) {
+                // فعال کردن
                 autoMineBtn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
                 autoMineBtn.classList.remove('btn-primary');
                 autoMineBtn.classList.add('btn-warning');
                 
-                this.showNotification('🤖', 'استخراج خودکار فعال شد!');
-                
-                // تغییر وضعیت در game service
                 await this.gameService.toggleAutoMining();
-                
-                // شروع انیمیشن استخراج خودکار
+                this.showNotification('🤖', 'استخراج خودکار فعال شد!');
                 this.startAutoMiningAnimation();
-                
-                // شروع UI auto mining interval
                 this.startUIAutoMining();
                 
             } else {
-                // غیرفعال کردن استخراج خودکار
+                // غیرفعال کردن
                 autoMineBtn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
                 autoMineBtn.classList.remove('btn-warning');
                 autoMineBtn.classList.add('btn-primary');
                 
-                this.showNotification('⏸️', 'استخراج خودکار متوقف شد.');
-                
-                // توقف در game service
                 await this.gameService.toggleAutoMining();
-                
-                // توقف انیمیشن
+                this.showNotification('⏸️', 'استخراج خودکار متوقف شد');
                 this.stopAutoMiningAnimation();
-                
-                // توقف UI interval
                 this.stopUIAutoMining();
             }
             
             this.updateGameUI();
             
         } catch (error) {
-            console.error('❌ Error toggling auto mining:', error);
-            this.showNotification('❌', error.message || 'خطا در تغییر وضعیت استخراج خودکار');
+            console.error('❌ Auto mining error:', error);
+            this.showNotification('❌', error.message || 'خطا در استخراج خودکار');
         }
     }
     
-    startUIAutoMining() {
-        // UI فقط آپدیت می‌کند، منطق استخراج در game.js است
-        if (this.autoMiningInterval) {
-            clearInterval(this.autoMiningInterval);
-        }
-        
-        this.autoMiningInterval = setInterval(() => {
-            this.updateGameUI();
-            this.pulseMinerCore();
-        }, 1000);
-    }
-    
-    stopUIAutoMining() {
-        if (this.autoMiningInterval) {
-            clearInterval(this.autoMiningInterval);
-            this.autoMiningInterval = null;
-        }
-    }
-    
+    // 10. نمایش فروش SOD
     async showSODSale() {
-        console.log('🛒 Showing SOD sale section');
-        
-        // ابتدا چک می‌کنیم کاربر لاگین کرده باشد
-        if (!this.authService || !this.authService.isUserVerified()) {
+        if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
             return;
@@ -616,46 +388,31 @@ class UIService {
         }
     }
     
-    // ============ Helper functions ============
-    
-    isValidEmail(email) {
-        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return re.test(email);
-    }
-    
-    generatePassword() {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklopqrstuvwxyz0123456789!@#$%^&*';
-        let password = '';
-        for (let i = 0; i < 12; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
+    // 11. هندل خروج
+    async handleLogout() {
+        try {
+            const result = await this.authService.signOut();
+            
+            if (result.success) {
+                this.showNotification('👋', result.message);
+                this.showLogin();
+            } else {
+                this.showNotification('❌', result.error || 'خطا در خروج');
+            }
+        } catch (error) {
+            console.error('🚨 Logout error:', error);
+            this.showNotification('❌', 'خطای غیرمنتظره در خروج');
         }
-        return password;
     }
     
-    showNotification(title, message) {
-        const notification = document.getElementById('notification');
-        const notificationTitle = document.getElementById('notificationTitle');
-        const notificationMessage = document.getElementById('notificationMessage');
-        
-        if (!notification || !notificationTitle || !notificationMessage) return;
-        
-        notificationTitle.textContent = title;
-        notificationMessage.textContent = message;
-        
-        notification.classList.add('show');
-        
-        setTimeout(() => {
-            notification.classList.remove('show');
-        }, 4000);
-    }
-    
-    async updateGameUI() {
+    // 12. آپدیت UI بازی
+    updateGameUI() {
         if (!this.gameService) return;
         
         const gameData = this.gameService.getGameData();
         if (!gameData) return;
         
-        // فرمت‌دهنده اعداد
+        // فرمت اعداد
         const formatNumber = (num) => {
             if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
             if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -701,12 +458,7 @@ class UIService {
             availableUSDT.textContent = gameData.usdtBalance.toFixed(4) + ' USDT';
         }
         
-        const nextReward = document.getElementById('nextReward');
-        if (nextReward) {
-            nextReward.textContent = '۰.۰۱ USDT';
-        }
-        
-        const progressPercent = (gameData.usdtProgress / 10000000) * 100;
+        const progressPercent = Math.min((gameData.usdtProgress / 10000000) * 100, 100);
         const progressFill = document.getElementById('progressFill');
         if (progressFill) {
             progressFill.style.width = progressPercent + '%';
@@ -714,10 +466,10 @@ class UIService {
         
         const progressText = document.getElementById('progressText');
         if (progressText) {
-            progressText.textContent = formatNumber(gameData.usdtProgress) + ' / ۱۰,۰۰۰,۰۰۰ SOD (۰.۰۱ USDT)';
+            progressText.textContent = `${formatNumber(gameData.usdtProgress)} / ۱۰,۰۰۰,۰۰۰ SOD (۰.۰۱ USDT)`;
         }
         
-        // آپدیت دکمه استخراج خودکار
+        // دکمه استخراج خودکار
         const autoMineBtn = document.getElementById('autoMineBtn');
         if (autoMineBtn) {
             if (gameData.autoMining) {
@@ -730,129 +482,42 @@ class UIService {
                 autoMineBtn.classList.add('btn-primary');
             }
         }
-    }
-    
-    // ============ تابع چک کردن وضعیت ادمین ============
-    async checkAdminStatus() {
-        try {
-            const user = this.authService ? this.authService.getCurrentUser() : null;
-            if (!user) {
-                console.log('👤 No user logged in');
-                return false;
-            }
-            
-            console.log('🔍 Checking admin status for:', user.email);
-            
-            // لیست ادمین‌ها
-            const adminEmails = [
-                'hamyarhf@gmail.com',      // ادمین اصلی
-                'admin@sodmax.com',        // ادمین دوم
-                'test@admin.com'           // ادمین تست
-            ];
-            
-            // چک کردن ایمیل کاربر
-            const userEmail = user.email.toLowerCase().trim();
-            const isAdmin = adminEmails.includes(userEmail);
-            
-            console.log('👑 Admin status:', isAdmin ? 'ADMIN' : 'USER');
-            
-            // نمایش یا مخفی کردن لینک ادمین
-            const adminLink = document.getElementById('adminLink');
-            if (adminLink) {
-                if (isAdmin) {
-                    adminLink.style.display = 'flex';
-                    adminLink.style.background = 'rgba(255, 107, 53, 0.3)';
-                    adminLink.innerHTML = `
-                        <i class="fas fa-user-shield"></i>
-                        <span class="nav-text">مدیریت</span>
-                    `;
-                } else {
-                    adminLink.style.display = 'none';
-                }
-            }
-            
-            return isAdmin;
-        } catch (error) {
-            console.error('❌ Error in checkAdminStatus:', error);
-            return false;
+        
+        // نمایش بوست
+        const boostStatus = document.querySelector('.boost-status');
+        if (boostStatus) {
+            boostStatus.textContent = gameData.boostActive ? 
+                '⚡ فعال (۳۰ دقیقه)' : 'غیرفعال';
+            boostStatus.style.color = gameData.boostActive ? 
+                'var(--success)' : 'var(--text-secondary)';
         }
     }
     
-    // ============ تابع آپدیت پروفایل کاربر ============
-    async updateUserProfile() {
-        try {
-            const user = this.authService ? this.authService.getCurrentUser() : null;
-            if (!user) return;
-            
-            // چک کردن وضعیت ادمین
-            const isAdmin = await this.checkAdminStatus();
-            
-            // نمایش نام کاربر با نشان ادمین
-            const userNameElement = document.getElementById('userName');
-            if (userNameElement) {
-                const adminBadge = isAdmin ? '<span class="admin-badge">👑 ادمین</span> ' : '';
-                userNameElement.innerHTML = adminBadge + (user.user_metadata?.full_name || user.email.split('@')[0]);
-            }
-            
-            // نمایش ایمیل کاربر
-            const userEmailElement = document.getElementById('userEmail');
-            if (userEmailElement) {
-                userEmailElement.textContent = user.email;
-            }
-            
-            // نمایش سطح کاربر
-            if (this.gameService) {
-                const gameData = this.gameService.getGameData();
-                const userLevelElement = document.getElementById('userLevel');
-                if (userLevelElement) {
-                    userLevelElement.textContent = gameData.userLevel;
-                }
-            }
-        } catch (error) {
-            console.error('❌ Error in updateUserProfile:', error);
-        }
+    // 13. نمایش نوتیفیکیشن
+    showNotification(title, message) {
+        const notification = document.getElementById('notification');
+        const notificationTitle = document.getElementById('notificationTitle');
+        const notificationMessage = document.getElementById('notificationMessage');
+        
+        if (!notification || !notificationTitle || !notificationMessage) return;
+        
+        notificationTitle.textContent = title;
+        notificationMessage.textContent = message;
+        
+        notification.classList.add('show');
+        
+        setTimeout(() => {
+            notification.classList.remove('show');
+        }, 4000);
     }
     
+    // 14. افکت استخراج
     showMiningEffect(amount) {
-        // ابتدا مطمئن شویم انیمیشن در CSS وجود دارد
-        const style = document.createElement('style');
-        style.id = 'mining-effect-styles';
-        style.textContent = `
-            @keyframes miningEffect {
-                0% {
-                    opacity: 1;
-                    transform: translate(0, 0) scale(1);
-                }
-                100% {
-                    opacity: 0;
-                    transform: translate(0, -100px) scale(1.5);
-                }
-            }
-            
-            .mining-effect {
-                position: fixed;
-                font-weight: 900;
-                font-size: 24px;
-                pointer-events: none;
-                z-index: 10000;
-                text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary);
-                animation: miningEffect 1.5s ease-out forwards;
-                user-select: none;
-            }
-        `;
-        
-        // اگر هنوز اضافه نشده، اضافه کن
-        if (!document.getElementById('mining-effect-styles')) {
-            document.head.appendChild(style);
-        }
-        
-        // ایجاد المان افکت
         const effect = document.createElement('div');
         effect.className = 'mining-effect';
         effect.textContent = `+${this.formatNumber(amount)}`;
         effect.style.color = this.getRandomColor();
         
-        // موقعیت‌یابی در وسط ماینر
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
             const rect = minerCore.getBoundingClientRect();
@@ -861,7 +526,6 @@ class UIService {
             
             document.body.appendChild(effect);
             
-            // حذف المان بعد از انیمیشن
             setTimeout(() => {
                 if (effect.parentNode) {
                     effect.parentNode.removeChild(effect);
@@ -870,20 +534,7 @@ class UIService {
         }
     }
     
-    // تابع helper برای رنگ‌های تصادفی
-    getRandomColor() {
-        const colors = [
-            '#0066FF', // آبی اصلی
-            '#00D4AA', // سبز
-            '#FF6B35', // نارنجی
-            '#FFD700', // طلایی
-            '#FF4081', // صورتی
-            '#7C4DFF'  // بنفش
-        ];
-        return colors[Math.floor(Math.random() * colors.length)];
-    }
-    
-    // تابع پالس برای ماینر
+    // 15. پالس ماینر
     pulseMinerCore() {
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
@@ -897,41 +548,15 @@ class UIService {
         }
     }
     
-    // انیمیشن استخراج خودکار
+    // 16. شروع انیمیشن استخراج خودکار
     startAutoMiningAnimation() {
         const minerCore = document.getElementById('minerCore');
-        if (!minerCore) return;
-        
-        // اضافه کردن کلاس انیمیشن
-        minerCore.classList.add('auto-mining');
-        
-        // اضافه کردن استایل انیمیشن
-        const style = document.createElement('style');
-        style.id = 'auto-mining-styles';
-        style.textContent = `
-            .auto-mining {
-                animation: pulseGlow 1.5s infinite alternate;
-            }
-            
-            @keyframes pulseGlow {
-                0% {
-                    box-shadow: inset 0 0 40px rgba(0, 102, 255, 0.2), 
-                              0 10px 30px rgba(0, 0, 0, 0.5),
-                              0 0 20px rgba(0, 102, 255, 0.3);
-                }
-                100% {
-                    box-shadow: inset 0 0 60px rgba(0, 102, 255, 0.4), 
-                              0 15px 40px rgba(0, 102, 255, 0.3),
-                              0 0 40px rgba(0, 212, 170, 0.5);
-                }
-            }
-        `;
-        
-        if (!document.getElementById('auto-mining-styles')) {
-            document.head.appendChild(style);
+        if (minerCore) {
+            minerCore.classList.add('auto-mining');
         }
     }
     
+    // 17. توقف انیمیشن استخراج خودکار
     stopAutoMiningAnimation() {
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
@@ -939,69 +564,33 @@ class UIService {
         }
     }
     
-    formatNumber(num) {
-        if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
-        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-        return Math.floor(num).toLocaleString('fa-IR');
+    // 18. شروع UI auto mining (فقط برای آپدیت UI)
+    startUIAutoMining() {
+        if (this.autoMiningInterval) {
+            clearInterval(this.autoMiningInterval);
+        }
+        
+        this.autoMiningInterval = setInterval(() => {
+            this.updateGameUI();
+            this.pulseMinerCore();
+        }, 1000);
     }
     
+    // 19. توقف UI auto mining
+    stopUIAutoMining() {
+        if (this.autoMiningInterval) {
+            clearInterval(this.autoMiningInterval);
+            this.autoMiningInterval = null;
+        }
+    }
+    
+    // 20. بارگذاری پنل‌های فروش
     async loadSalePlans() {
-        console.log('🛒 Loading sale plans...');
-        
         const salePlansGrid = document.getElementById('salePlansGrid');
         if (!salePlansGrid) return;
         
         try {
-            let plans = [];
-            
-            // سعی می‌کنیم از دیتابیس بگیریم
-            if (this.supabaseService) {
-                plans = await this.supabaseService.getSalePlans();
-            }
-            
-            // اگر نتوانستیم، از پیش‌فرض استفاده می‌کنیم
-            if (!plans || plans.length === 0) {
-                console.log('ℹ️ Using default sale plans');
-                plans = [
-                    {
-                        id: 1,
-                        name: "پنل استارتر",
-                        price: 1,
-                        sod_amount: 5000000,
-                        features: ["۵,۰۰۰,۰۰۰ SOD", "هدیه ۵۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵٪"],
-                        popular: false,
-                        discount: 0
-                    },
-                    {
-                        id: 2,
-                        name: "پنل پرو",
-                        price: 5,
-                        sod_amount: 30000000,
-                        features: ["۳۰,۰۰۰,۰۰۰ SOD", "هدیه ۳,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۱۵٪"],
-                        popular: true,
-                        discount: 10
-                    },
-                    {
-                        id: 3,
-                        name: "پنل پلاتینیوم",
-                        price: 15,
-                        sod_amount: 100000000,
-                        features: ["۱۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۱۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۳۰٪"],
-                        popular: false,
-                        discount: 15
-                    },
-                    {
-                        id: 4,
-                        name: "پنل الماس",
-                        price: 50,
-                        sod_amount: 500000000,
-                        features: ["۵۰۰,۰۰۰,۰۰۰ SOD", "هدیه ۵۰,۰۰۰,۰۰۰ SOD اضافی", "قدرت استخراج +۵۰٪"],
-                        popular: false,
-                        discount: 20
-                    }
-                ];
-            }
+            const plans = await this.supabaseService.getSalePlansFromDB();
             
             salePlansGrid.innerHTML = '';
             
@@ -1022,7 +611,9 @@ class UIService {
                     </div>
                     
                     <ul class="sale-plan-features">
-                        ${plan.features ? plan.features.map(feature => `<li><i class="fas fa-check" style="color: var(--success);"></i> ${feature}</li>`).join('') : ''}
+                        <li><i class="fas fa-check" style="color: var(--success);"></i> ${this.formatNumber(plan.sod_amount)} SOD اصلی</li>
+                        <li><i class="fas fa-check" style="color: var(--success);"></i> ${this.formatNumber(Math.floor(plan.sod_amount * (plan.discount / 100)))} SOD هدیه</li>
+                        <li><i class="fas fa-check" style="color: var(--success);"></i> قدرت استخراج +${plan.discount}%</li>
                     </ul>
                     
                     <button class="btn ${plan.popular ? 'btn-warning' : 'btn-primary'}" onclick="uiService.buySODPlan(${plan.id})">
@@ -1034,61 +625,39 @@ class UIService {
                 salePlansGrid.appendChild(card);
             });
             
-            console.log('✅ Sale plans loaded:', plans.length);
         } catch (error) {
             console.error('❌ Error loading sale plans:', error);
             salePlansGrid.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">خطا در بارگذاری پنل‌ها</p>';
         }
     }
     
+    // 21. خرید پنل SOD
     async buySODPlan(planId) {
-        if (!this.authService || !this.authService.isUserVerified()) {
+        if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
             this.showLogin();
-            return;
-        }
-        
-        if (!this.gameService) {
-            this.showNotification('❌', 'سرویس بازی در دسترس نیست');
             return;
         }
         
         try {
             const result = await this.gameService.buySODPlan(planId);
             if (result.success) {
-                this.showNotification('🎉', `پنل خریداری شد! ${this.formatNumber(result.sodReceived)} SOD دریافت کردید.`);
+                this.showNotification('🎉', `پنل ${result.planName} خریداری شد! ${this.formatNumber(result.sodReceived)} SOD دریافت کردید.`);
                 this.updateGameUI();
             }
         } catch (error) {
-            console.error('❌ Error buying SOD plan:', error);
+            console.error('❌ Buy plan error:', error);
             this.showNotification('❌', error.message || 'خطا در خرید پنل');
         }
     }
     
+    // 22. بارگذاری تراکنش‌ها
     async loadTransactions() {
-        console.log('📋 Loading transactions...');
-        
         const transactionsList = document.getElementById('transactionsList');
-        if (!transactionsList) return;
+        if (!transactionsList || !this.userId) return;
         
         try {
-            let transactions = [];
-            
-            // سعی می‌کنیم از دیتابیس بگیریم
-            const user = this.authService ? this.authService.getCurrentUser() : null;
-            if (user && this.supabaseService) {
-                transactions = await this.supabaseService.getTransactions(user.id, 10);
-            }
-            
-            // اگر نتوانستیم، از localStorage استفاده می‌کنیم
-            if (!transactions || transactions.length === 0) {
-                if (user) {
-                    const localTransactions = localStorage.getItem(`sodmax_transactions_${user.id}`);
-                    if (localTransactions) {
-                        transactions = JSON.parse(localTransactions);
-                    }
-                }
-            }
+            const transactions = await this.supabaseService.getUserTransactions(this.userId, 10);
             
             if (transactions.length === 0) {
                 transactionsList.innerHTML = `
@@ -1125,16 +694,61 @@ class UIService {
                             ${amountSign}${Math.abs(transaction.amount).toLocaleString('fa-IR')} ${transaction.currency}
                         </div>
                     </div>
+                    ${transaction.description ? `<div style="font-size: 12px; color: var(--text-secondary);">${transaction.description}</div>` : ''}
                 `;
                 
                 transactionsList.appendChild(row);
             });
             
-            console.log('✅ Transactions loaded:', transactions.length);
         } catch (error) {
-            console.error('❌ Error loading transactions:', error);
-            transactionsList.innerHTML = '<p style="text-align: center; color: var(--error);">خطا در بارگذاری تراکنش‌ها</p>';
+            console.error('❌ Load transactions error:', error);
         }
+    }
+    
+    // 23. چک کردن وضعیت ادمین
+    checkAdminStatus(user) {
+        if (!user) return;
+        
+        const adminEmails = [
+            'hamyarhf@gmail.com',
+            'admin@sodmax.com',
+            'test@admin.com'
+        ];
+        
+        const userEmail = user.email.toLowerCase().trim();
+        const isAdmin = adminEmails.includes(userEmail);
+        
+        const adminLink = document.getElementById('adminLink');
+        if (adminLink) {
+            if (isAdmin) {
+                adminLink.style.display = 'flex';
+                adminLink.style.background = 'rgba(255, 107, 53, 0.3)';
+                adminLink.innerHTML = `
+                    <i class="fas fa-user-shield"></i>
+                    <span class="nav-text">مدیریت</span>
+                `;
+            } else {
+                adminLink.style.display = 'none';
+            }
+        }
+    }
+    
+    // 24. Helper functions
+    isValidEmail(email) {
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return re.test(email);
+    }
+    
+    getRandomColor() {
+        const colors = ['#0066FF', '#00D4AA', '#FF6B35', '#FFD700', '#FF4081', '#7C4DFF'];
+        return colors[Math.floor(Math.random() * colors.length)];
+    }
+    
+    formatNumber(num) {
+        if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return Math.floor(num).toLocaleString('fa-IR');
     }
     
     getTransactionIcon(type) {
@@ -1145,28 +759,25 @@ class UIService {
             'boost': '⚡',
             'withdrawal': '💳'
         };
-        
         return icons[type] || '📝';
     }
     
     getTransactionTypeText(type) {
         const texts = {
-            'mining': 'استخراج دستی',
+            'mining': 'استخراج',
             'usdt_reward': 'پاداش USDT',
             'purchase': 'خرید پنل',
             'boost': 'افزایش قدرت',
-            'withdrawal': 'برداشت USDT'
+            'withdrawal': 'برداشت'
         };
-        
         return texts[type] || type;
     }
 }
 
-// ایجاد instance و export
+// ایجاد instance جهانی
 window.uiService = new UIService();
-console.log('✅ UI service instance created');
 
-// Wait for DOM to load
+// وقتی DOM لود شد
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('📄 DOM loaded, UI service ready');
+    console.log('📄 DOM loaded, UI service active');
 });
