@@ -784,76 +784,79 @@
         let missions = [];
         
         // وقتی DOM لود شد
-       document.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 Admin panel loaded');
     
-    // بررسی auth عمومی بازی
+    // 1. بررسی auth با روش‌های مختلف
+    let user = null;
+    let userEmail = null;
+    
+    // روش ۱: از localStorage بازی
     const userData = localStorage.getItem('sodmax_user');
-    if (!userData) {
+    if (userData) {
+        try {
+            user = JSON.parse(userData);
+            userEmail = user.email || user.user_metadata?.email;
+            console.log('📱 User from game localStorage:', userEmail);
+        } catch (e) {
+            console.warn('❌ Could not parse sodmax_user:', e);
+        }
+    }
+    
+    // روش ۲: از Supabase Auth (اگر موجود باشد)
+    if (!userEmail && window.supabaseClient) {
+        try {
+            const { data: { session } } = await window.supabaseClient.auth.getSession();
+            if (session?.user) {
+                userEmail = session.user.email;
+                console.log('🔐 User from Supabase Auth:', userEmail);
+            }
+        } catch (e) {
+            console.warn('❌ Supabase auth check failed:', e);
+        }
+    }
+    
+    // 2. اگر کاربری پیدا نشد
+    if (!userEmail) {
         alert('⚠️ لطفاً ابتدا از صفحه اصلی وارد حساب کاربری خود شوید.');
         window.location.href = 'index.html';
         return;
     }
     
-    const user = JSON.parse(userData);
-    
-    // لیست ادمین‌های مجاز
+    // 3. بررسی ادمین بودن (با حساسیت به حروف بزرگ/کوچک)
     const adminEmails = [
         'hamyarhf@gmail.com',
+        'hamyarhf@Gmail.com',
+        'Hamyarhf@gmail.com',
         'admin@sodmax.com',
         'test@admin.com'
-    ];
+    ].map(email => email.toLowerCase());
     
-    // بررسی اینکه آیا کاربر ادمین است
-    if (!adminEmails.includes(user.email)) {
-        alert('⚠️ این صفحه فقط برای مدیران سیستم قابل دسترسی است.');
+    const userEmailLower = userEmail.toLowerCase().trim();
+    
+    if (!adminEmails.includes(userEmailLower)) {
+        alert(`⚠️ این صفحه فقط برای مدیران سیستم قابل دسترسی است.\n\nایمیل شما: ${userEmail}`);
         window.location.href = 'index.html';
         return;
     }
     
-    console.log('✅ Admin access granted for:', user.email);
+    console.log('✅ Admin access granted for:', userEmail);
     
-            
-            // بارگذاری اولیه
-            await loadDashboardData();
-            await loadGameSettings();
-            await loadSalePlans();
-            await loadMissions();
-            
-            // ایونت‌ها
-            document.getElementById('planForm').addEventListener('submit', savePlan);
-            document.getElementById('missionForm').addEventListener('submit', saveMission);
-            document.getElementById('userForm').addEventListener('submit', saveUser);
-            
-            // ریفرش خودکار هر 30 ثانیه
-            setInterval(updateDashboard, 30000);
-        });
-        
-        // تابع نمایش بخش‌ها
-        function showSection(sectionId) {
-            // مخفی کردن همه بخش‌ها
-            document.querySelectorAll('.content-section').forEach(section => {
-                section.classList.remove('active');
-            });
-            
-            // آپدیت منو
-            document.querySelectorAll('.nav-menu a').forEach(link => {
-                link.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            // نمایش بخش مورد نظر
-            const section = document.getElementById(sectionId + '-section');
-            if (section) {
-                section.classList.add('active');
-                
-                // اگر بخش داشبورد است، آپدیت کن
-                if (sectionId === 'dashboard') {
-                    updateDashboard();
-                }
-            }
-        }
-        
+    // 4. ذخیره وضعیت ادمین برای استفاده بعدی
+    localStorage.setItem('sodmax_admin', 'true');
+    
+    // ادامه کدهای شما...
+    await loadDashboardData();
+    await loadGameSettings();
+    await loadSalePlans();
+    await loadMissions();
+    
+    document.getElementById('planForm').addEventListener('submit', savePlan);
+    document.getElementById('missionForm').addEventListener('submit', saveMission);
+    document.getElementById('userForm').addEventListener('submit', saveUser);
+    
+    setInterval(updateDashboard, 30000);
+});
         // ==================== DASHBOARD ====================
         async function loadDashboardData() {
             try {
