@@ -7,6 +7,7 @@ class GameService {
         this.authService = null;
         this.gameData = this.loadGameFromStorage();
         this.autoSaveInterval = null;
+        this.autoMineInterval = null; // اضافه شد
         this.isOnline = true;
         
         // منتظر می‌مانیم تا سرویس‌ها لود شوند
@@ -159,7 +160,7 @@ class GameService {
             return success;
         } catch (error) {
             console.warn('Failed to save game to database:', error);
-            this.isOnline = false; // به حالت آفلاین می‌رویم
+            this.isOnline = false;
             return false;
         }
     }
@@ -228,21 +229,26 @@ class GameService {
         // ذخیره
         this.saveGameToStorage();
         
-        // لاگ تراکنش
+        // لاگ تراکنش (با try-catch برای جلوگیری از خطا)
         if (this.supabaseService) {
-            await this.supabaseService.addTransaction(user.id, {
-                type: 'mining',
-                amount: earned,
-                currency: 'SOD',
-                description: 'استخراج دستی'
-            });
+            try {
+                await this.supabaseService.addTransaction(user.id, {
+                    type: 'mining',
+                    amount: earned,
+                    currency: 'SOD',
+                    description: 'استخراج دستی'
+                });
+            } catch (error) {
+                console.warn('⚠️ Could not save transaction to database:', error.message);
+                // ادامه می‌دهیم حتی اگر تراکنش ذخیره نشد
+            }
         }
         
         // بررسی پاداش USDT
         const usdtResult = await this.checkUSDT();
         
-        // شانس ارتقاء سطح
-        if (Math.random() > 0.85) {
+        // شانس ارتقاء سطح (کاهش یافته از 0.85 به 0.97)
+        if (Math.random() > 0.97) {
             const newLevel = await this.levelUp();
             console.log('⭐ Level up to:', newLevel);
         }
@@ -254,6 +260,58 @@ class GameService {
             usdtResult,
             gameData: this.gameData
         };
+    }
+    
+    async autoMine() {
+        if (!this.gameData.autoMining) return null;
+        
+        try {
+            const result = await this.manualMine();
+            return result;
+        } catch (error) {
+            console.error('❌ Auto mining error:', error);
+            return null;
+        }
+    }
+    
+    // تابع جدید برای toggle auto mining
+    async toggleAutoMining() {
+        this.gameData.autoMining = !this.gameData.autoMining;
+        
+        if (this.gameData.autoMining) {
+            console.log('🤖 Auto mining started');
+            
+            // چک کردن موجودی برای استخراج خودکار
+            if (this.gameData.sodBalance < 10000) {
+                this.gameData.autoMining = false;
+                throw new Error('برای استخراج خودکار حداقل ۱۰,۰۰۰ SOD نیاز دارید.');
+            }
+            
+            // شروع استخراج خودکار
+            if (this.autoMineInterval) {
+                clearInterval(this.autoMineInterval);
+            }
+            
+            this.autoMineInterval = setInterval(async () => {
+                if (!this.gameData.autoMining) {
+                    clearInterval(this.autoMineInterval);
+                    this.autoMineInterval = null;
+                    return;
+                }
+                
+                await this.autoMine();
+            }, 3000); // هر 3 ثانیه
+            
+        } else {
+            console.log('⏸️ Auto mining stopped');
+            if (this.autoMineInterval) {
+                clearInterval(this.autoMineInterval);
+                this.autoMineInterval = null;
+            }
+        }
+        
+        this.saveGameToStorage();
+        return this.gameData.autoMining;
     }
     
     async checkUSDT() {
@@ -270,19 +328,23 @@ class GameService {
             // لاگ تراکنش
             const user = this.getCurrentUser();
             if (user && this.supabaseService) {
-                await this.supabaseService.addTransaction(user.id, {
-                    type: 'usdt_reward',
-                    amount: usdtEarned,
-                    currency: 'USDT',
-                    description: 'پاداش استخراج'
-                });
+                try {
+                    await this.supabaseService.addTransaction(user.id, {
+                        type: 'usdt_reward',
+                        amount: usdtEarned,
+                        currency: 'USDT',
+                        description: 'پاداش استخراج'
+                    });
+                } catch (error) {
+                    console.warn('⚠️ Could not save USDT transaction:', error.message);
+                }
             }
             
             console.log('💰 USDT reward:', usdtEarned);
             
             return {
                 usdtEarned,
-                levelUp: Math.random() > 0.85
+                levelUp: Math.random() > 0.97
             };
         }
         
@@ -318,12 +380,16 @@ class GameService {
         // لاگ تراکنش
         const user = this.getCurrentUser();
         if (user && this.supabaseService) {
-            await this.supabaseService.addTransaction(user.id, {
-                type: 'boost',
-                amount: -5000,
-                currency: 'SOD',
-                description: 'خرید قدرت استخراج'
-            });
+            try {
+                await this.supabaseService.addTransaction(user.id, {
+                    type: 'boost',
+                    amount: -5000,
+                    currency: 'SOD',
+                    description: 'خرید قدرت استخراج'
+                });
+            } catch (error) {
+                console.warn('⚠️ Could not save boost transaction:', error.message);
+            }
         }
         
         // غیرفعال کردن بوست بعد از 30 دقیقه
@@ -347,7 +413,7 @@ class GameService {
         }
         
         const usdtToClaim = this.gameData.usdtBalance;
-        const sodNeeded = usdtToClaim * 1000000000; // 1 USDT = 1,000,000,000 SOD
+        const sodNeeded = usdtToClaim * 1000000000;
         
         if (this.gameData.sodBalance < sodNeeded) {
             throw new Error('Not enough SOD for conversion');
@@ -363,12 +429,16 @@ class GameService {
         // لاگ تراکنش
         const user = this.getCurrentUser();
         if (user && this.supabaseService) {
-            await this.supabaseService.addTransaction(user.id, {
-                type: 'withdrawal',
-                amount: usdtToClaim,
-                currency: 'USDT',
-                description: 'برداشت USDT'
-            });
+            try {
+                await this.supabaseService.addTransaction(user.id, {
+                    type: 'withdrawal',
+                    amount: usdtToClaim,
+                    currency: 'USDT',
+                    description: 'برداشت USDT'
+                });
+            } catch (error) {
+                console.warn('⚠️ Could not save withdrawal transaction:', error.message);
+            }
         }
         
         console.log('💸 USDT claimed:', usdtToClaim);
@@ -413,6 +483,10 @@ class GameService {
         return this.gameData.todayEarnings;
     }
     
+    getAutoMiningStatus() {
+        return this.gameData.autoMining;
+    }
+    
     // برای ریست روزانه
     resetDailyEarnings() {
         this.gameData.todayEarnings = 0;
@@ -437,10 +511,10 @@ class GameService {
         // اگر نتوانستیم از دیتابیس بگیریم، از پیش‌فرض استفاده می‌کنیم
         if (!salePlans || salePlans.length === 0) {
             salePlans = [
-                { id: 1, price: 1, sod_amount: 5000000, discount: 0 },
-                { id: 2, price: 5, sod_amount: 30000000, discount: 10 },
-                { id: 3, price: 15, sod_amount: 100000000, discount: 15 },
-                { id: 4, price: 50, sod_amount: 500000000, discount: 20 }
+                { id: 1, name: "پنل استارتر", price: 1, sod_amount: 5000000, discount: 0 },
+                { id: 2, name: "پنل پرو", price: 5, sod_amount: 30000000, discount: 10 },
+                { id: 3, name: "پنل پلاتینیوم", price: 15, sod_amount: 100000000, discount: 15 },
+                { id: 4, name: "پنل الماس", price: 50, sod_amount: 500000000, discount: 20 }
             ];
         }
         
@@ -462,12 +536,16 @@ class GameService {
         
         // لاگ تراکنش
         if (this.supabaseService) {
-            await this.supabaseService.addTransaction(user.id, {
-                type: 'purchase',
-                amount: totalSOD,
-                currency: 'SOD',
-                description: `خرید پنل ${plan.name || `ID: ${plan.id}`}`
-            });
+            try {
+                await this.supabaseService.addTransaction(user.id, {
+                    type: 'purchase',
+                    amount: totalSOD,
+                    currency: 'SOD',
+                    description: `خرید پنل ${plan.name || `ID: ${plan.id}`}`
+                });
+            } catch (error) {
+                console.warn('⚠️ Could not save purchase transaction:', error.message);
+            }
         }
         
         console.log('🛒 Plan purchased:', totalSOD, 'SOD');
