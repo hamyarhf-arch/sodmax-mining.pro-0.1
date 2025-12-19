@@ -1,4 +1,4 @@
-// js/auth.js - نسخه اصلاح شده
+// Authentication functions for SODmAX Pro
 class AuthService {
     constructor() {
         this.currentUser = null;
@@ -6,53 +6,40 @@ class AuthService {
         this.supabase = null;
         
         console.log('🔐 AuthService initializing...');
-        
-        // صبر می‌کنیم تا supabaseClient لود شود
         this.init();
     }
     
     async init() {
-        // منتظر می‌مانیم تا window.supabaseClient لود شود
-        let attempts = 0;
-        const maxAttempts = 10;
+        await this.waitForSupabase();
         
-        while (attempts < maxAttempts) {
-            if (window.supabaseClient) {
-                this.supabase = window.supabaseClient;
-                console.log('✅ Supabase client found in auth service');
-                break;
-            }
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-        
+        this.supabase = window.supabaseClient;
         if (!this.supabase) {
-            console.error('❌ Supabase client not found in auth service');
+            console.error('❌ Supabase client not found');
             return;
         }
         
-        // چک کردن کاربر از localStorage
         this.loadUserFromStorage();
-        
-        // گوش دادن به تغییرات وضعیت احراز هویت
-        this.supabase.auth.onAuthStateChange((event, session) => {
-            console.log('🔐 Auth state changed:', event);
+        console.log('✅ AuthService initialized');
+    }
+    
+    waitForSupabase() {
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const maxAttempts = 20;
             
-            if (event === 'SIGNED_IN' && session?.user) {
-                this.handleSignedIn(session.user);
-            } else if (event === 'SIGNED_OUT') {
-                this.handleSignedOut();
-            } else if (event === 'USER_UPDATED') {
-                console.log('👤 User updated');
-                this.checkUserVerification();
-            } else if (event === 'TOKEN_REFRESHED') {
-                console.log('🔄 Token refreshed');
-            } else if (event === 'PASSWORD_RECOVERY') {
-                console.log('🔑 Password recovery');
-            }
+            const check = () => {
+                attempts++;
+                if (window.supabaseClient) {
+                    resolve();
+                } else if (attempts < maxAttempts) {
+                    setTimeout(check, 100);
+                } else {
+                    resolve();
+                }
+            };
+            
+            check();
         });
-        
-        console.log('✅ AuthService initialized successfully');
     }
     
     loadUserFromStorage() {
@@ -71,7 +58,6 @@ class AuthService {
     saveUserToStorage(user) {
         try {
             localStorage.setItem('sodmax_user', JSON.stringify(user));
-            console.log('📱 User saved to storage');
         } catch (error) {
             console.error('❌ Error saving user to storage:', error);
         }
@@ -80,171 +66,8 @@ class AuthService {
     clearUserStorage() {
         try {
             localStorage.removeItem('sodmax_user');
-            localStorage.removeItem('sodmax_game_data');
-            localStorage.removeItem('sodmax_transactions');
-            console.log('📱 User storage cleared');
         } catch (error) {
             console.error('❌ Error clearing user storage:', error);
-        }
-    }
-    
-    async handleSignedIn(user) {
-        console.log('👤 User signed in:', user.email);
-        
-        try {
-            // بررسی اینکه آیا کاربر در دیتابیس ما ثبت‌نام کرده است
-            const isRegistered = await this.checkUserRegistration(user);
-            
-            if (isRegistered) {
-                this.currentUser = user;
-                this.userVerified = true;
-                this.saveUserToStorage(user);
-                console.log('✅ User verified and registered');
-                
-                // اطلاع‌رسانی به UI
-                if (window.uiService) {
-                    setTimeout(() => {
-                        window.uiService.onUserVerified(user);
-                    }, 500);
-                }
-            } else {
-                console.log('⚠️ User not registered in database');
-                this.userVerified = false;
-                
-                // نمایش پیام به کاربر
-                if (window.uiService) {
-                    setTimeout(() => {
-                        window.uiService.showNotification('❌', 'ثبت‌نام تکمیل نشده. لطفاً دوباره تلاش کنید.');
-                    }, 500);
-                }
-            }
-        } catch (error) {
-            console.error('🚨 Error in handleSignedIn:', error);
-            this.userVerified = false;
-        }
-    }
-    
-    async checkUserRegistration(user) {
-        try {
-            console.log('🔍 Checking user registration for:', user.email);
-            
-            // 1. بررسی اینکه آیا کاربر ایمیل خود را تأیید کرده است
-            const emailConfirmed = user.email_confirmed_at || user.confirmed_at;
-            if (!emailConfirmed) {
-                console.log('📧 Email not confirmed yet');
-                return false;
-            }
-            
-            // 2. بررسی وجود کاربر در جدول users ما
-            if (!window.supabaseService) {
-                console.error('❌ Supabase service not available');
-                return false;
-            }
-            
-            const existingUser = await window.supabaseService.getUserByEmail(user.email);
-            
-            if (existingUser) {
-                console.log('✅ User found in database');
-                return true;
-            }
-            
-            // 3. اگر کاربر در دیتابیس ما نیست، ایجادش کن
-            console.log('👤 Creating user in database...');
-            const createdUser = await window.supabaseService.createUser({
-                id: user.id,
-                email: user.email,
-                fullName: user.user_metadata?.full_name || user.email.split('@')[0],
-                referralCode: user.user_metadata?.referral_code || ''
-            });
-            
-            return !!createdUser;
-        } catch (error) {
-            console.error('🚨 Error checking user registration:', error);
-            return false;
-        }
-    }
-    
-    async checkUserVerification() {
-        if (!this.currentUser) {
-            console.log('ℹ️ No current user to verify');
-            return false;
-        }
-        
-        try {
-            const { data: { user }, error } = await this.supabase.auth.getUser();
-            
-            if (error) {
-                console.error('❌ Error getting user for verification:', error);
-                return false;
-            }
-            
-            if (user) {
-                const isVerified = await this.checkUserRegistration(user);
-                this.userVerified = isVerified;
-                return isVerified;
-            }
-            
-            return false;
-        } catch (error) {
-            console.error('🚨 Error in checkUserVerification:', error);
-            return false;
-        }
-    }
-    
-    handleSignedOut() {
-        console.log('👤 Handling sign out...');
-        this.currentUser = null;
-        this.userVerified = false;
-        this.clearUserStorage();
-        console.log('✅ User signed out and storage cleared');
-        
-        // اطلاع‌رسانی به UI
-        if (window.uiService) {
-            setTimeout(() => {
-                window.uiService.onUserSignedOut();
-            }, 500);
-        }
-    }
-    
-    async handleAuthStateChange() {
-        try {
-            console.log('🔐 Checking auth state...');
-            
-            if (!this.supabase) {
-                console.error('❌ Supabase client not initialized');
-                return null;
-            }
-            
-            const { data: { user }, error } = await this.supabase.auth.getUser();
-            
-            if (error) {
-                console.log('👤 Auth error:', error.message);
-                this.handleSignedOut();
-                return null;
-            }
-            
-            if (user) {
-                console.log('👤 User found:', user.email);
-                const isRegistered = await this.checkUserRegistration(user);
-                
-                if (isRegistered) {
-                    this.currentUser = user;
-                    this.userVerified = true;
-                    this.saveUserToStorage(user);
-                    console.log('✅ User authenticated and registered');
-                    return user;
-                } else {
-                    console.log('❌ User not registered in database');
-                    this.userVerified = false;
-                    return null;
-                }
-            }
-            
-            console.log('👤 No user found in session');
-            return null;
-        } catch (error) {
-            console.error('🚨 Error in handleAuthStateChange:', error);
-            return null;
         }
     }
     
@@ -252,7 +75,6 @@ class AuthService {
         try {
             console.log('📝 Signing up:', email);
             
-            // اعتبارسنجی اولیه
             if (!this.isValidEmail(email)) {
                 return { 
                     success: false, 
@@ -260,17 +82,10 @@ class AuthService {
                 };
             }
             
-            if (password.length < 6) {
+            if (!this.supabase) {
                 return { 
                     success: false, 
-                    error: 'رمز عبور باید حداقل ۶ کاراکتر باشد' 
-                };
-            }
-            
-            if (!this.supabase) {
-                return {
-                    success: false,
-                    error: 'سرویس احراز هویت آماده نیست'
+                    error: 'سرویس احراز هویت آماده نیست' 
                 };
             }
             
@@ -281,8 +96,7 @@ class AuthService {
                     data: {
                         full_name: fullName,
                         referral_code: referralCode
-                    },
-                    emailRedirectTo: window.location.origin
+                    }
                 }
             });
             
@@ -294,12 +108,24 @@ class AuthService {
                 };
             }
             
-            console.log('✅ Sign up API successful');
+            console.log('✅ Sign up successful');
             
-            // اگر کاربر بلافاصله تأیید شد (در محیط توسعه)
-            if (data.user && (data.user.email_confirmed_at || data.session)) {
-                console.log('🎉 User confirmed immediately (development mode)');
-                await this.handleSignedIn(data.user);
+            // For demo - auto login
+            if (data.user) {
+                this.currentUser = data.user;
+                this.userVerified = true;
+                this.saveUserToStorage(data.user);
+                
+                // Create user in our database
+                if (window.supabaseService) {
+                    await window.supabaseService.createUser({
+                        id: data.user.id,
+                        email: data.user.email,
+                        fullName: fullName,
+                        referralCode: referralCode
+                    });
+                }
+                
                 return { 
                     success: true, 
                     data,
@@ -307,12 +133,10 @@ class AuthService {
                 };
             }
             
-            // اگر نیاز به تأیید ایمیل دارد
-            console.log('📧 Email confirmation required');
             return { 
                 success: true, 
                 data,
-                message: 'ثبت‌نام موفقیت‌آمیز بود! لطفاً ایمیل خود را برای تأیید بررسی کنید.'
+                message: 'ثبت‌نام موفقیت‌آمیز بود!'
             };
         } catch (error) {
             console.error('🚨 Sign up exception:', error);
@@ -328,9 +152,9 @@ class AuthService {
             console.log('🔑 Signing in:', email);
             
             if (!this.supabase) {
-                return {
-                    success: false,
-                    error: 'سرویس احراز هویت آماده نیست'
+                return { 
+                    success: false, 
+                    error: 'سرویس احراز هویت آماده نیست' 
                 };
             }
             
@@ -347,21 +171,11 @@ class AuthService {
                 };
             }
             
-            console.log('✅ Sign in API successful');
+            console.log('✅ Sign in successful');
             
-            // بررسی ثبت‌نام کاربر
-            const isRegistered = await this.checkUserRegistration(data.user);
-            
-            if (!isRegistered) {
-                console.error('❌ User not registered in our system');
-                await this.signOut();
-                return { 
-                    success: false, 
-                    error: 'شما ثبت‌نام نکرده‌اید. لطفاً ابتدا ثبت‌نام کنید.'
-                };
-            }
-            
-            await this.handleSignedIn(data.user);
+            this.currentUser = data.user;
+            this.userVerified = true;
+            this.saveUserToStorage(data.user);
             
             return { 
                 success: true, 
@@ -379,8 +193,6 @@ class AuthService {
     
     async signOut() {
         try {
-            console.log('👋 Signing out...');
-            
             if (!this.supabase) {
                 this.handleSignedOut();
                 return { 
@@ -411,11 +223,43 @@ class AuthService {
         }
     }
     
-    getCurrentUser() {
-        if (this.userVerified && this.currentUser) {
-            return this.currentUser;
+    handleSignedOut() {
+        this.currentUser = null;
+        this.userVerified = false;
+        this.clearUserStorage();
+        console.log('👤 User signed out');
+    }
+    
+    async handleAuthStateChange() {
+        try {
+            if (!this.supabase) {
+                return null;
+            }
+            
+            const { data: { user }, error } = await this.supabase.auth.getUser();
+            
+            if (error) {
+                console.log('👤 Auth error:', error.message);
+                return null;
+            }
+            
+            if (user) {
+                this.currentUser = user;
+                this.userVerified = true;
+                this.saveUserToStorage(user);
+                console.log('✅ User authenticated:', user.email);
+                return user;
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('🚨 Error in handleAuthStateChange:', error);
+            return null;
         }
-        return null;
+    }
+    
+    getCurrentUser() {
+        return this.userVerified ? this.currentUser : null;
     }
     
     isUserVerified() {
@@ -433,48 +277,21 @@ class AuthService {
             'Invalid login credentials': 'ایمیل یا رمز عبور نادرست است.',
             'Email not confirmed': 'لطفاً ایمیل خود را تأیید کنید.',
             'Weak password': 'رمز عبور بسیار ضعیف است.',
-            'Auth session missing': 'لطفاً دوباره وارد شوید.',
-            'Network error': 'خطای شبکه. لطفاً اتصال اینترنت را بررسی کنید.',
             'User not found': 'کاربری با این ایمیل پیدا نشد.',
-            'Invalid email': 'ایمیل نامعتبر است.',
-            'Email rate limit exceeded': 'تعداد درخواست‌های ایمیل بیش از حد است. لطفاً چند دقیقه دیگر تلاش کنید.'
+            'Invalid email': 'ایمیل نامعتبر است.'
         };
         
         return errorMessages[error.message] || error.message || 'خطای نامشخص';
-    }
-    
-    // تابع برای چک کردن وضعیت ایمیل تأیید
-    async checkEmailConfirmation() {
-        if (!this.currentUser) return false;
-        
-        try {
-            const { data: { user }, error } = await this.supabase.auth.getUser();
-            
-            if (error) {
-                console.error('❌ Error checking email confirmation:', error);
-                return false;
-            }
-            
-            return !!(user?.email_confirmed_at || user?.confirmed_at);
-        } catch (error) {
-            console.error('🚨 Error in checkEmailConfirmation:', error);
-            return false;
-        }
     }
 }
 
 // Create global instance
 window.authService = new AuthService();
-console.log('✅ Auth service instance created');
+console.log('✅ Auth service loaded');
 
-// Wait for DOM to load
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('📄 DOM loaded, checking auth state...');
-    
-    // Check auth state after a short delay
-    setTimeout(async () => {
-        if (window.authService && window.authService.handleAuthStateChange) {
-            await window.authService.handleAuthStateChange();
-        }
-    }, 1000);
-});
+// Check auth state on load
+setTimeout(async () => {
+    if (window.authService && window.authService.handleAuthStateChange) {
+        await window.authService.handleAuthStateChange();
+    }
+}, 1000);
