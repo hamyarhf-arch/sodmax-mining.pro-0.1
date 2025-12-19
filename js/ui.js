@@ -10,6 +10,7 @@ class UIService {
         
         this.isInitialized = false;
         this.isUserVerified = false;
+        this.autoMiningInterval = null;
         
         // منتظر می‌مانیم تا سرویس‌ها لود شوند
         this.init();
@@ -174,9 +175,14 @@ class UIService {
             registerOverlay.style.display = 'flex';
             
             // ریست فرم
+            const loginForm = document.getElementById('loginForm');
             const registerForm = document.getElementById('registerForm');
-            if (registerForm) {
-                registerForm.reset();
+            if (loginForm) loginForm.reset();
+            if (registerForm) registerForm.reset();
+            
+            // نمایش تب لاگین به صورت پیش‌فرض
+            if (window.switchAuthTab) {
+                window.switchAuthTab('login');
             }
         }
         
@@ -188,7 +194,14 @@ class UIService {
     bindEvents() {
         console.log('🔗 Binding events...');
         
-        // فرم ثبت‌نام/ورود
+        // فرم ورود
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => this.handleLoginSubmit(e));
+            console.log('✅ Login form bound');
+        }
+        
+        // فرم ثبت‌نام
         const registerForm = document.getElementById('registerForm');
         if (registerForm) {
             registerForm.addEventListener('submit', (e) => this.handleRegister(e));
@@ -242,37 +255,111 @@ class UIService {
         console.log('✅ All events bound');
     }
     
-    async handleRegister(e) {
+    async handleLoginSubmit(e) {
         e.preventDefault();
         
-        const fullName = document.getElementById('fullName');
-        const email = document.getElementById('email');
-        const referralCode = document.getElementById('referralCode');
+        const email = document.getElementById('loginEmail');
+        const password = document.getElementById('loginPassword');
         
-        if (!fullName || !email) {
-            this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
+        if (!email || !password) {
+            this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
             return;
         }
         
-        const fullNameValue = fullName.value.trim();
         const emailValue = email.value.trim();
-        const referralCodeValue = referralCode ? referralCode.value.trim() : '';
+        const passwordValue = password.value.trim();
         
-        if (!fullNameValue || !emailValue) {
-            this.showNotification('❌', 'لطفاً نام و ایمیل را وارد کنید');
+        if (!emailValue || !passwordValue) {
+            this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
             return;
         }
         
-        // بررسی فرمت ایمیل
         if (!this.isValidEmail(emailValue)) {
             this.showNotification('❌', 'لطفاً یک ایمیل معتبر وارد کنید');
             return;
         }
         
-        // تولید رمز عبور تصادفی
-        const password = this.generatePassword();
+        // غیرفعال کردن دکمه
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ورود...';
+        }
         
-        this.showNotification('⏳', 'در حال ثبت‌نام...');
+        try {
+            if (!this.authService) {
+                throw new Error('سرویس احراز هویت در دسترس نیست');
+            }
+            
+            console.log('🔑 Attempting login for:', emailValue);
+            
+            const result = await this.authService.signIn(emailValue, passwordValue);
+            
+            console.log('🔑 Login result:', result);
+            
+            if (result.success) {
+                this.showNotification('✅', result.message);
+                
+                // اگر کاربر لاگین شده
+                if (this.authService.isUserVerified()) {
+                    setTimeout(() => {
+                        const user = this.authService.getCurrentUser();
+                        if (user) {
+                            this.showMainApp(user);
+                        }
+                    }, 1000);
+                }
+            } else {
+                this.showNotification('❌', result.error || 'خطا در ورود');
+                
+                // پاک کردن رمز عبور
+                if (password) {
+                    password.value = '';
+                }
+            }
+        } catch (error) {
+            console.error('🚨 Error in handleLoginSubmit:', error);
+            this.showNotification('❌', 'خطای غیرمنتظره در ورود: ' + error.message);
+        } finally {
+            // فعال کردن دکمه
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به حساب';
+            }
+        }
+    }
+    
+    async handleRegister(e) {
+        e.preventDefault();
+        
+        const fullName = document.getElementById('fullName');
+        const email = document.getElementById('email');
+        const password = document.getElementById('password');
+        const confirmPassword = document.getElementById('confirmPassword');
+        const referralCode = document.getElementById('referralCode');
+        
+        // اعتبارسنجی
+        if (!fullName.value.trim() || !email.value.trim() || !password.value) {
+            this.showNotification('❌', 'لطفاً تمام فیلدهای ضروری را پر کنید');
+            return;
+        }
+        
+        if (password.value !== confirmPassword.value) {
+            this.showNotification('❌', 'رمز عبور و تکرار آن مطابقت ندارند');
+            return;
+        }
+        
+        if (password.value.length < 6) {
+            this.showNotification('❌', 'رمز عبور باید حداقل ۶ کاراکتر باشد');
+            return;
+        }
+        
+        if (!this.isValidEmail(email.value)) {
+            this.showNotification('❌', 'لطفاً یک ایمیل معتبر وارد کنید');
+            return;
+        }
+        
+        this.showNotification('⏳', 'در حال ایجاد حساب کاربری...');
         
         // غیرفعال کردن دکمه
         const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -282,16 +369,20 @@ class UIService {
         }
         
         try {
-            if (!this.authService) {
-                throw new Error('سرویس احراز هویت در دسترس نیست');
-            }
-            
-            const result = await this.authService.signUp(emailValue, password, fullNameValue, referralCodeValue);
+            const result = await this.authService.signUp(
+                email.value.trim(),
+                password.value,
+                fullName.value.trim(),
+                referralCode ? referralCode.value.trim() : ''
+            );
             
             if (result.success) {
                 this.showNotification('✅', result.message);
                 
-                // اگر کاربر بلافاصله وارد شده، برنامه اصلی را نشان بده
+                // پاک کردن فرم
+                e.target.reset();
+                
+                // اگر کاربر بلافاصله لاگین شد
                 if (this.authService.isUserVerified()) {
                     setTimeout(() => {
                         const user = this.authService.getCurrentUser();
@@ -299,11 +390,14 @@ class UIService {
                             this.showMainApp(user);
                         }
                     }, 1500);
-                } else {
-                    // اگر نیاز به تأیید ایمیل دارد، راهنمایی کن
+                } else if (result.message.includes('ایمیل')) {
+                    // اگر نیاز به تأیید ایمیل دارد
                     setTimeout(() => {
                         this.showNotification('📧', 'لطفاً ایمیل خود را برای تأیید بررسی کنید.');
-                        this.showLogin(); // بازگشت به صفحه لاگین
+                        // برگشت به صفحه لاگین
+                        if (window.switchAuthTab) {
+                            window.switchAuthTab('login');
+                        }
                     }, 2000);
                 }
             } else {
@@ -316,34 +410,8 @@ class UIService {
             // فعال کردن دکمه
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> ثبت‌نام و شروع استخراج';
+                submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> ایجاد حساب کاربری';
             }
-        }
-    }
-    
-    async handleLogin(email, password) {
-        try {
-            if (!this.authService) {
-                this.showNotification('❌', 'سرویس احراز هویت در دسترس نیست');
-                return;
-            }
-            
-            this.showNotification('⏳', 'در حال ورود...');
-            
-            const result = await this.authService.signIn(email, password);
-            
-            if (result.success) {
-                this.showNotification('✅', result.message);
-                const user = this.authService.getCurrentUser();
-                if (user) {
-                    this.showMainApp(user);
-                }
-            } else {
-                this.showNotification('❌', result.error || 'خطا در ورود');
-            }
-        } catch (error) {
-            console.error('🚨 Error in handleLogin:', error);
-            this.showNotification('❌', 'خطای غیرمنتظره در ورود');
         }
     }
     
@@ -351,6 +419,12 @@ class UIService {
         if (!this.authService) {
             this.showNotification('❌', 'سرویس احراز هویت در دسترس نیست');
             return;
+        }
+        
+        // توقف استخراج خودکار
+        if (this.autoMiningInterval) {
+            clearInterval(this.autoMiningInterval);
+            this.autoMiningInterval = null;
         }
         
         const result = await this.authService.signOut();
@@ -381,20 +455,24 @@ class UIService {
             // آپدیت UI
             this.updateGameUI();
             
-            // نمایش افکت
-            this.showMiningEffect(result.earned);
+            // نمایش افکت (بعد از کمی تأخیر برای روان‌تر شدن)
+            setTimeout(() => {
+                this.showMiningEffect(result.earned);
+                this.pulseMinerCore();
+            }, 100);
             
             // بررسی پاداش USDT
             if (result.usdtResult) {
                 this.showNotification('🎉', `${result.usdtResult.usdtEarned.toFixed(4)} USDT دریافت کردید!`);
                 
                 if (result.usdtResult.levelUp) {
-                    this.showNotification('⭐', `سطح شما ارتقاء یافت!`);
+                    this.showNotification('⭐', `سطح شما ارتقاء یافت! سطح ${this.gameService.getUserLevel()}`);
                 }
             }
+            
         } catch (error) {
             console.error('❌ Error in mining:', error);
-            this.showNotification('❌', 'خطا در استخراج');
+            this.showNotification('❌', error.message || 'خطا در استخراج');
         }
     }
     
@@ -455,59 +533,75 @@ class UIService {
         }
         
         const gameData = this.gameService.getGameData();
-        if (gameData.sodBalance < 1000000) {
-            this.showNotification('⚠️', 'برای استخراج خودکار حداقل ۱ میلیون SOD نیاز دارید.');
-            return;
-        }
-        
         const autoMineBtn = document.getElementById('autoMineBtn');
-        if (!autoMineBtn) return;
         
-        if (!gameData.autoMining) {
-            // فعال کردن استخراج خودکار
-            autoMineBtn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
-            autoMineBtn.style.background = 'var(--error)';
-            this.showNotification('🤖', 'استخراج خودکار فعال شد.');
-            
-            // آپدیت وضعیت در game service
-            gameData.autoMining = true;
-            
-            // شروع استخراج خودکار
-            const autoMineInterval = setInterval(async () => {
-                const currentData = this.gameService.getGameData();
-                if (!currentData.autoMining) {
-                    clearInterval(autoMineInterval);
+        try {
+            if (!gameData.autoMining) {
+                // فعال کردن استخراج خودکار
+                
+                // چک کردن موجودی
+                if (gameData.sodBalance < 10000) {
+                    this.showNotification('⚠️', 'برای استخراج خودکار حداقل ۱۰,۰۰۰ SOD نیاز دارید.');
                     return;
                 }
                 
-                try {
-                    const result = await this.gameService.manualMine();
-                    this.updateGameUI();
-                    
-                    if (result.usdtResult) {
-                        this.showNotification('🎉', `${result.usdtResult.usdtEarned.toFixed(4)} USDT دریافت کردید!`);
-                    }
-                } catch (error) {
-                    console.error('❌ Auto mining error:', error);
-                }
-            }, 3000);
-            
-            // ذخیره interval برای توقف بعدی
-            this.autoMineInterval = autoMineInterval;
-        } else {
-            // غیرفعال کردن استخراج خودکار
-            autoMineBtn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
-            autoMineBtn.style.background = '';
-            this.showNotification('⏸️', 'استخراج خودکار متوقف شد.');
-            
-            // آپدیت وضعیت در game service
-            gameData.autoMining = false;
-            
-            // توقف interval
-            if (this.autoMineInterval) {
-                clearInterval(this.autoMineInterval);
-                this.autoMineInterval = null;
+                autoMineBtn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
+                autoMineBtn.classList.remove('btn-primary');
+                autoMineBtn.classList.add('btn-warning');
+                
+                this.showNotification('🤖', 'استخراج خودکار فعال شد!');
+                
+                // تغییر وضعیت در game service
+                await this.gameService.toggleAutoMining();
+                
+                // شروع انیمیشن استخراج خودکار
+                this.startAutoMiningAnimation();
+                
+                // شروع UI auto mining interval
+                this.startUIAutoMining();
+                
+            } else {
+                // غیرفعال کردن استخراج خودکار
+                autoMineBtn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
+                autoMineBtn.classList.remove('btn-warning');
+                autoMineBtn.classList.add('btn-primary');
+                
+                this.showNotification('⏸️', 'استخراج خودکار متوقف شد.');
+                
+                // توقف در game service
+                await this.gameService.toggleAutoMining();
+                
+                // توقف انیمیشن
+                this.stopAutoMiningAnimation();
+                
+                // توقف UI interval
+                this.stopUIAutoMining();
             }
+            
+            this.updateGameUI();
+            
+        } catch (error) {
+            console.error('❌ Error toggling auto mining:', error);
+            this.showNotification('❌', error.message || 'خطا در تغییر وضعیت استخراج خودکار');
+        }
+    }
+    
+    startUIAutoMining() {
+        // UI فقط آپدیت می‌کند، منطق استخراج در game.js است
+        if (this.autoMiningInterval) {
+            clearInterval(this.autoMiningInterval);
+        }
+        
+        this.autoMiningInterval = setInterval(() => {
+            this.updateGameUI();
+            this.pulseMinerCore();
+        }, 1000);
+    }
+    
+    stopUIAutoMining() {
+        if (this.autoMiningInterval) {
+            clearInterval(this.autoMiningInterval);
+            this.autoMiningInterval = null;
         }
     }
     
@@ -631,57 +725,153 @@ class UIService {
         if (progressText) {
             progressText.textContent = formatNumber(gameData.usdtProgress) + ' / ۱۰,۰۰۰,۰۰۰ SOD (۰.۰۱ USDT)';
         }
+        
+        // آپدیت دکمه استخراج خودکار
+        const autoMineBtn = document.getElementById('autoMineBtn');
+        if (autoMineBtn) {
+            if (gameData.autoMining) {
+                autoMineBtn.innerHTML = '<i class="fas fa-pause"></i> توقف خودکار';
+                autoMineBtn.classList.remove('btn-primary');
+                autoMineBtn.classList.add('btn-warning');
+            } else {
+                autoMineBtn.innerHTML = '<i class="fas fa-robot"></i> استخراج خودکار';
+                autoMineBtn.classList.remove('btn-warning');
+                autoMineBtn.classList.add('btn-primary');
+            }
+        }
     }
     
     showMiningEffect(amount) {
-        const effect = document.createElement('div');
-        effect.style.cssText = `
-            position: fixed;
-            color: var(--primary-light);
-            font-weight: 900;
-            font-size: 20px;
-            pointer-events: none;
-            z-index: 10000;
-            text-shadow: 0 0 10px var(--primary);
-            animation: miningEffect 1s ease-out forwards;
+        // ابتدا مطمئن شویم انیمیشن در CSS وجود دارد
+        const style = document.createElement('style');
+        style.id = 'mining-effect-styles';
+        style.textContent = `
+            @keyframes miningEffect {
+                0% {
+                    opacity: 1;
+                    transform: translate(0, 0) scale(1);
+                }
+                100% {
+                    opacity: 0;
+                    transform: translate(0, -100px) scale(1.5);
+                }
+            }
+            
+            .mining-effect {
+                position: fixed;
+                font-weight: 900;
+                font-size: 24px;
+                pointer-events: none;
+                z-index: 10000;
+                text-shadow: 0 0 10px var(--primary), 0 0 20px var(--primary);
+                animation: miningEffect 1.5s ease-out forwards;
+                user-select: none;
+            }
         `;
         
-        // ایجاد انیمیشن اگر وجود ندارد
-        if (!document.querySelector('#miningEffectStyle')) {
-            const style = document.createElement('style');
-            style.id = 'miningEffectStyle';
-            style.textContent = `
-                @keyframes miningEffect {
-                    0% {
-                        opacity: 1;
-                        transform: translate(0, 0) scale(1);
-                    }
-                    100% {
-                        opacity: 0;
-                        transform: translate(0, -80px) scale(1.2);
-                    }
-                }
-            `;
+        // اگر هنوز اضافه نشده، اضافه کن
+        if (!document.getElementById('mining-effect-styles')) {
             document.head.appendChild(style);
         }
         
-        const formatNumber = (num) => {
-            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-            return Math.floor(num);
-        };
+        // ایجاد المان افکت
+        const effect = document.createElement('div');
+        effect.className = 'mining-effect';
+        effect.textContent = `+${this.formatNumber(amount)}`;
+        effect.style.color = this.getRandomColor();
         
-        const core = document.getElementById('minerCore');
-        if (core) {
-            const rect = core.getBoundingClientRect();
-            effect.style.left = rect.left + rect.width / 2 + 'px';
-            effect.style.top = rect.top + rect.height / 2 + 'px';
-            effect.textContent = '+' + formatNumber(amount);
+        // موقعیت‌یابی در وسط ماینر
+        const minerCore = document.getElementById('minerCore');
+        if (minerCore) {
+            const rect = minerCore.getBoundingClientRect();
+            effect.style.left = (rect.left + rect.width / 2) + 'px';
+            effect.style.top = (rect.top + rect.height / 2) + 'px';
             
             document.body.appendChild(effect);
             
-            setTimeout(() => effect.remove(), 1000);
+            // حذف المان بعد از انیمیشن
+            setTimeout(() => {
+                if (effect.parentNode) {
+                    effect.parentNode.removeChild(effect);
+                }
+            }, 1500);
         }
+    }
+    
+    // تابع helper برای رنگ‌های تصادفی
+    getRandomColor() {
+        const colors = [
+            '#0066FF', // آبی اصلی
+            '#00D4AA', // سبز
+            '#FF6B35', // نارنجی
+            '#FFD700', // طلایی
+            '#FF4081', // صورتی
+            '#7C4DFF'  // بنفش
+        ];
+        return colors[Math.floor(Math.random() * colors.length)];
+    }
+    
+    // تابع پالس برای ماینر
+    pulseMinerCore() {
+        const minerCore = document.getElementById('minerCore');
+        if (minerCore) {
+            minerCore.style.transform = 'scale(0.95)';
+            minerCore.style.boxShadow = 'inset 0 0 60px rgba(0, 102, 255, 0.3), 0 15px 40px rgba(0, 102, 255, 0.4)';
+            
+            setTimeout(() => {
+                minerCore.style.transform = 'scale(1)';
+                minerCore.style.boxShadow = 'inset 0 0 40px rgba(0, 102, 255, 0.1), 0 10px 30px rgba(0, 0, 0, 0.5)';
+            }, 200);
+        }
+    }
+    
+    // انیمیشن استخراج خودکار
+    startAutoMiningAnimation() {
+        const minerCore = document.getElementById('minerCore');
+        if (!minerCore) return;
+        
+        // اضافه کردن کلاس انیمیشن
+        minerCore.classList.add('auto-mining');
+        
+        // اضافه کردن استایل انیمیشن
+        const style = document.createElement('style');
+        style.id = 'auto-mining-styles';
+        style.textContent = `
+            .auto-mining {
+                animation: pulseGlow 1.5s infinite alternate;
+            }
+            
+            @keyframes pulseGlow {
+                0% {
+                    box-shadow: inset 0 0 40px rgba(0, 102, 255, 0.2), 
+                              0 10px 30px rgba(0, 0, 0, 0.5),
+                              0 0 20px rgba(0, 102, 255, 0.3);
+                }
+                100% {
+                    box-shadow: inset 0 0 60px rgba(0, 102, 255, 0.4), 
+                              0 15px 40px rgba(0, 102, 255, 0.3),
+                              0 0 40px rgba(0, 212, 170, 0.5);
+                }
+            }
+        `;
+        
+        if (!document.getElementById('auto-mining-styles')) {
+            document.head.appendChild(style);
+        }
+    }
+    
+    stopAutoMiningAnimation() {
+        const minerCore = document.getElementById('minerCore');
+        if (minerCore) {
+            minerCore.classList.remove('auto-mining');
+        }
+    }
+    
+    formatNumber(num) {
+        if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+        return Math.floor(num).toLocaleString('fa-IR');
     }
     
     async loadSalePlans() {
@@ -897,13 +1087,6 @@ class UIService {
         };
         
         return texts[type] || type;
-    }
-    
-    formatNumber(num) {
-        if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
-        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-        return Math.floor(num).toLocaleString('fa-IR');
     }
 }
 
