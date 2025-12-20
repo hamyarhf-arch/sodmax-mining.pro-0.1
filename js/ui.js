@@ -951,7 +951,7 @@ class UIService {
                 <div class="payment-info">
                     <h4><i class="fas fa-university"></i> اطلاعات حساب بانکی</h4>
                     <div style="margin-top: 10px;">
-                        <p><strong>شماره کارت:</strong> 6037-7994-1234-5678</p>
+                        <p><strong>شماره کارت:</strong> ****-****-****-****</p>
                         <p><strong>دارنده حساب:</strong> شرکت SODmAX</p>
                         <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
                         <p><strong>توضیحات:</strong> شماره کاربری خود را در توضیحات انتقال ذکر کنید</p>
