@@ -983,8 +983,8 @@ class UIService {
                 <div class="payment-info">
                     <h4><i class="fab fa-ethereum"></i> آدرس کیف پول USDT (BEP20)</h4>
                     <div style="margin-top: 10px;">
-                        <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">0x7a9f3b3c8d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8</code></p>
-                        <button class="btn btn-sm btn-outline" onclick="window.uiService.copyToClipboard('0x7a9f3b3c8d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8')" style="margin: 5px 0;">
+                        <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">**********************</code></p>
+                        <button class="btn btn-sm btn-outline" onclick="window.uiService.copyToClipboard('********************')" style="margin: 5px 0;">
                             <i class="fas fa-copy"></i> کپی آدرس
                         </button>
                         <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
