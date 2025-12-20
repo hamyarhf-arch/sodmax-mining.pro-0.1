@@ -868,298 +868,7 @@
             </form>
         </div>
     </div>
-// ============ مدیریت کیف پول و درگاه‌ها ============
-let withdrawalRequests = [];
-let walletSettings = {};
-
-async function loadWalletSettings() {
-    try {
-        const { data, error } = await supabaseClient
-            .from('wallet_settings')
-            .select('*');
-        
-        if (error) throw error;
-        
-        walletSettings = {};
-        if (data) {
-            data.forEach(setting => {
-                walletSettings[setting.setting_key] = setting.setting_value;
-            });
-        }
-        
-        renderWalletSettings();
-        
-    } catch (error) {
-        console.error('❌ Error loading wallet settings:', error);
-    }
-}
-
-function renderWalletSettings() {
-    // اگر مودال باز است، مقادیر رو پر کن
-    if (document.getElementById('enableBankGateway')) {
-        document.getElementById('enableBankGateway').checked = walletSettings.enable_bank_gateway === 'true';
-        document.getElementById('bankCardNumber').value = walletSettings.bank_card_number || '';
-        document.getElementById('bankAccountHolder').value = walletSettings.bank_account_holder || '';
-        document.getElementById('enableCryptoGateway').checked = walletSettings.enable_crypto_gateway === 'true';
-        document.getElementById('usdtWalletAddress').value = walletSettings.usdt_wallet_address || '';
-        document.getElementById('usdtBep20Address').value = walletSettings.usdt_bep20_address || '';
-        
-        document.getElementById('minWithdrawalUsdt').value = walletSettings.min_withdrawal_usdt || 10;
-        document.getElementById('maxWithdrawalUsdt').value = walletSettings.max_withdrawal_usdt || 1000;
-        document.getElementById('withdrawalFeePercent').value = walletSettings.withdrawal_fee_percent || 2;
-        document.getElementById('withdrawalProcessingTime').value = walletSettings.withdrawal_processing_time || 24;
-        
-        document.getElementById('maxDailyBoosts').value = walletSettings.max_daily_boosts || 3;
-        document.getElementById('maxDailyPurchases').value = walletSettings.max_daily_purchases || 5;
-        document.getElementById('dailyMiningLimit').value = walletSettings.daily_mining_limit || 1000000;
-        document.getElementById('walletUsdtCap').value = walletSettings.wallet_usdt_cap || 10000;
-    }
-}
-
-function showWalletTab(tabName) {
-    // غیرفعال کردن همه تب‌ها
-    document.querySelectorAll('#walletSettingsModal .tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    
-    document.querySelectorAll('#walletSettingsModal .tab-content').forEach(content => {
-        content.classList.remove('active');
-    });
-    
-    // فعال کردن تب انتخاب شده
-    event.target.classList.add('active');
-    document.getElementById(tabName + 'Tab').classList.add('active');
-}
-
-function openWalletSettings() {
-    loadWalletSettings();
-    document.getElementById('walletSettingsModal').classList.add('active');
-}
-
-async function saveWalletSettings() {
-    try {
-        const settings = {
-            enable_bank_gateway: document.getElementById('enableBankGateway').checked.toString(),
-            bank_card_number: document.getElementById('bankCardNumber').value,
-            bank_account_holder: document.getElementById('bankAccountHolder').value,
-            enable_crypto_gateway: document.getElementById('enableCryptoGateway').checked.toString(),
-            usdt_wallet_address: document.getElementById('usdtWalletAddress').value,
-            usdt_bep20_address: document.getElementById('usdtBep20Address').value,
-            min_withdrawal_usdt: document.getElementById('minWithdrawalUsdt').value,
-            max_withdrawal_usdt: document.getElementById('maxWithdrawalUsdt').value,
-            withdrawal_fee_percent: document.getElementById('withdrawalFeePercent').value,
-            withdrawal_processing_time: document.getElementById('withdrawalProcessingTime').value,
-            max_daily_boosts: document.getElementById('maxDailyBoosts').value,
-            max_daily_purchases: document.getElementById('maxDailyPurchases').value,
-            daily_mining_limit: document.getElementById('dailyMiningLimit').value,
-            wallet_usdt_cap: document.getElementById('walletUsdtCap').value
-        };
-        
-        const updates = [];
-        for (const [key, value] of Object.entries(settings)) {
-            updates.push(
-                supabaseClient
-                    .from('wallet_settings')
-                    .upsert({
-                        setting_key: key,
-                        setting_value: value,
-                        updated_at: new Date().toISOString()
-                    })
-            );
-        }
-        
-        await Promise.all(updates);
-        showNotification('موفق', 'تنظیمات کیف پول ذخیره شد');
-        
-    } catch (error) {
-        console.error('❌ Error saving wallet settings:', error);
-        showNotification('خطا', 'خطا در ذخیره تنظیمات', 'error');
-    }
-}
-
-// ============ مدیریت درخواست‌های برداشت ============
-async function loadWithdrawalRequests(status = 'pending') {
-    try {
-        const { data, error } = await supabaseClient
-            .from('withdrawal_requests')
-            .select(`
-                *,
-                users (email, full_name)
-            `)
-            .eq('status', status)
-            .order('created_at', { ascending: false })
-            .limit(50);
-        
-        if (error) throw error;
-        
-        withdrawalRequests = data || [];
-        renderWithdrawalRequests();
-        
-    } catch (error) {
-        console.error('❌ Error loading withdrawal requests:', error);
-        showNotification('خطا', 'خطا در بارگذاری درخواست‌های برداشت', 'error');
-    }
-}
-
-function renderWithdrawalRequests() {
-    const container = document.getElementById('withdrawalRequestsList');
-    if (!container) return;
-    
-    if (withdrawalRequests.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
-                <i class="fas fa-check-circle" style="font-size: 48px; margin-bottom: 20px;"></i>
-                <h3>هیچ درخواست برداشت ${getStatusText('pending')} وجود ندارد</h3>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = '';
-    
-    withdrawalRequests.forEach(request => {
-        const user = request.users;
-        const card = document.createElement('div');
-        card.className = 'withdrawal-card';
-        
-        card.innerHTML = `
-            <div class="withdrawal-header">
-                <div class="withdrawal-user">
-                    <h4>${user.full_name || user.email}</h4>
-                    <div style="font-size: 12px; color: var(--text-secondary);">
-                        ${new Date(request.created_at).toLocaleString('fa-IR')}
-                    </div>
-                </div>
-                <div class="withdrawal-amount">
-                    <div class="amount">${parseFloat(request.amount).toLocaleString()} ${request.currency}</div>
-                    <span class="badge ${getStatusBadgeClass(request.status)}">
-                        ${getStatusText(request.status)}
-                    </span>
-                </div>
-            </div>
-            
-            <div class="withdrawal-details">
-                <div class="detail">
-                    <div class="label">آدرس کیف پول:</div>
-                    <div class="value">${request.wallet_address}</div>
-                </div>
-                <div class="detail">
-                    <div class="label">شبکه:</div>
-                    <div class="value">${request.network}</div>
-                </div>
-                <div class="detail">
-                    <div class="label">شماره درخواست:</div>
-                    <div class="value">${request.id}</div>
-                </div>
-            </div>
-            
-            ${request.admin_notes ? `
-                <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; margin: 10px 0;">
-                    <strong>یادداشت ادمین:</strong> ${request.admin_notes}
-                </div>
-            ` : ''}
-            
-            ${request.status === 'pending' ? `
-                <div class="withdrawal-actions">
-                    <button class="btn btn-success btn-sm" onclick="processWithdrawal(${request.id}, 'approved')">
-                        <i class="fas fa-check"></i> تأیید
-                    </button>
-                    <button class="btn btn-danger btn-sm" onclick="processWithdrawal(${request.id}, 'rejected')">
-                        <i class="fas fa-times"></i> رد
-                    </button>
-                    <button class="btn btn-primary btn-sm" onclick="showWithdrawalNotes(${request.id})">
-                        <i class="fas fa-edit"></i> یادداشت
-                    </button>
-                </div>
-            ` : ''}
-        `;
-        
-        container.appendChild(card);
-    });
-}
-
-function getStatusText(status) {
-    const statuses = {
-        'pending': 'در انتظار بررسی',
-        'approved': 'تأیید شده',
-        'rejected': 'رد شده',
-        'completed': 'تکمیل شده'
-    };
-    return statuses[status] || status;
-}
-
-function getStatusBadgeClass(status) {
-    const classes = {
-        'pending': 'badge-warning',
-        'approved': 'badge-success',
-        'rejected': 'badge-danger',
-        'completed': 'badge-info'
-    };
-    return classes[status] || 'badge-info';
-}
-
-async function processWithdrawal(requestId, status) {
-    const notes = prompt('لطفاً یادداشت اضافه کنید (اختیاری):');
-    
-    try {
-        // این تابع نیاز به پیاده‌سازی در walletService داره
-        const success = await window.walletService?.updateWithdrawalStatus(requestId, status, notes || '');
-        
-        if (success) {
-            showNotification('موفق', `درخواست برداشت ${getStatusText(status)} شد`);
-            await loadWithdrawalRequests('pending');
-        } else {
-            showNotification('خطا', 'خطا در پردازش درخواست', 'error');
-        }
-    } catch (error) {
-        console.error('❌ Error processing withdrawal:', error);
-        showNotification('خطا', 'خطا در پردازش درخواست', 'error');
-    }
-}
-
-function showWithdrawalNotes(requestId) {
-    const request = withdrawalRequests.find(r => r.id === requestId);
-    if (!request) return;
-    
-    const notes = prompt('یادداشت برای این درخواست:', request.admin_notes || '');
-    if (notes !== null) {
-        processWithdrawal(requestId, request.status, notes);
-    }
-}
-
-function openWithdrawalManagement() {
-    loadWithdrawalRequests('pending');
-    document.getElementById('withdrawalManagementModal').classList.add('active');
-}
-
-// ============ افزودن لینک به منوی ناوبری ============
-// این کد رو به تابع bindEvents در admin-panel اضافه کنید
-function addAdminMenuItems() {
-    const navMenu = document.querySelector('.nav-menu');
-    if (!navMenu) return;
-    
-    const walletItem = document.createElement('li');
-    walletItem.innerHTML = `
-        <a href="#" onclick="openWalletSettings()">
-            <i class="fas fa-wallet"></i> کیف پول و درگاه‌ها
-        </a>
-    `;
-    
-    const withdrawalsItem = document.createElement('li');
-    withdrawalsItem.innerHTML = `
-        <a href="#" onclick="openWithdrawalManagement()">
-            <i class="fas fa-money-check-alt"></i> مدیریت برداشت‌ها
-        </a>
-    `;
-    
-    // اضافه کردن به منو (قبل از گزینه "بازگشت به بازی")
-    navMenu.insertBefore(walletItem, navMenu.children[navMenu.children.length - 2]);
-    navMenu.insertBefore(withdrawalsItem, navMenu.children[navMenu.children.length - 2]);
-}
-
-// فراخوانی در DOMContentLoaded
-setTimeout(addAdminMenuItems, 1000);
-    <!-- اسکریپت‌ها -->
+        <!-- اسکریپت‌ها -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
         // ============ متغیرهای گلوبال ============
@@ -1173,6 +882,8 @@ setTimeout(addAdminMenuItems, 1000);
         let gameSettings = {};
         let salePlans = [];
         let missions = [];
+        let withdrawalRequests = [];
+        let walletSettings = {};
         
         // ============ وقتی DOM لود شد ============
         document.addEventListener('DOMContentLoaded', async () => {
@@ -1196,6 +907,9 @@ setTimeout(addAdminMenuItems, 1000);
             await loadMissions();
             await loadUsers();
             await loadTransactions();
+            
+            // اضافه کردن منوی کیف پول
+            addAdminMenuItems();
             
             // بایند کردن ایونت‌ها
             document.getElementById('planForm').addEventListener('submit', savePlan);
@@ -2299,6 +2013,299 @@ setTimeout(addAdminMenuItems, 1000);
             }
         }
         
+        // ============ مدیریت کیف پول و درگاه‌ها ============
+        async function loadWalletSettings() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('wallet_settings')
+                    .select('*');
+                
+                if (error) throw error;
+                
+                walletSettings = {};
+                if (data) {
+                    data.forEach(setting => {
+                        walletSettings[setting.setting_key] = setting.setting_value;
+                    });
+                }
+                
+                renderWalletSettings();
+                
+            } catch (error) {
+                console.error('❌ Error loading wallet settings:', error);
+            }
+        }
+        
+        function renderWalletSettings() {
+            // اگر مودال باز است، مقادیر رو پر کن
+            if (document.getElementById('enableBankGateway')) {
+                document.getElementById('enableBankGateway').checked = walletSettings.enable_bank_gateway === 'true';
+                document.getElementById('bankCardNumber').value = walletSettings.bank_card_number || '';
+                document.getElementById('bankAccountHolder').value = walletSettings.bank_account_holder || '';
+                document.getElementById('enableCryptoGateway').checked = walletSettings.enable_crypto_gateway === 'true';
+                document.getElementById('usdtWalletAddress').value = walletSettings.usdt_wallet_address || '';
+                document.getElementById('usdtBep20Address').value = walletSettings.usdt_bep20_address || '';
+                
+                document.getElementById('minWithdrawalUsdt').value = walletSettings.min_withdrawal_usdt || 10;
+                document.getElementById('maxWithdrawalUsdt').value = walletSettings.max_withdrawal_usdt || 1000;
+                document.getElementById('withdrawalFeePercent').value = walletSettings.withdrawal_fee_percent || 2;
+                document.getElementById('withdrawalProcessingTime').value = walletSettings.withdrawal_processing_time || 24;
+                
+                document.getElementById('maxDailyBoosts').value = walletSettings.max_daily_boosts || 3;
+                document.getElementById('maxDailyPurchases').value = walletSettings.max_daily_purchases || 5;
+                document.getElementById('dailyMiningLimit').value = walletSettings.daily_mining_limit || 1000000;
+                document.getElementById('walletUsdtCap').value = walletSettings.wallet_usdt_cap || 10000;
+            }
+        }
+        
+        function showWalletTab(tabName) {
+            // غیرفعال کردن همه تب‌ها
+            document.querySelectorAll('#walletSettingsModal .tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.querySelectorAll('#walletSettingsModal .tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // فعال کردن تب انتخاب شده
+            event.target.classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+        
+        function openWalletSettings() {
+            loadWalletSettings();
+            document.getElementById('walletSettingsModal').classList.add('active');
+        }
+        
+        async function saveWalletSettings() {
+            try {
+                const settings = {
+                    enable_bank_gateway: document.getElementById('enableBankGateway').checked.toString(),
+                    bank_card_number: document.getElementById('bankCardNumber').value,
+                    bank_account_holder: document.getElementById('bankAccountHolder').value,
+                    enable_crypto_gateway: document.getElementById('enableCryptoGateway').checked.toString(),
+                    usdt_wallet_address: document.getElementById('usdtWalletAddress').value,
+                    usdt_bep20_address: document.getElementById('usdtBep20Address').value,
+                    min_withdrawal_usdt: document.getElementById('minWithdrawalUsdt').value,
+                    max_withdrawal_usdt: document.getElementById('maxWithdrawalUsdt').value,
+                    withdrawal_fee_percent: document.getElementById('withdrawalFeePercent').value,
+                    withdrawal_processing_time: document.getElementById('withdrawalProcessingTime').value,
+                    max_daily_boosts: document.getElementById('maxDailyBoosts').value,
+                    max_daily_purchases: document.getElementById('maxDailyPurchases').value,
+                    daily_mining_limit: document.getElementById('dailyMiningLimit').value,
+                    wallet_usdt_cap: document.getElementById('walletUsdtCap').value
+                };
+                
+                const updates = [];
+                for (const [key, value] of Object.entries(settings)) {
+                    updates.push(
+                        supabaseClient
+                            .from('wallet_settings')
+                            .upsert({
+                                setting_key: key,
+                                setting_value: value,
+                                updated_at: new Date().toISOString()
+                            })
+                    );
+                }
+                
+                await Promise.all(updates);
+                showNotification('موفق', 'تنظیمات کیف پول ذخیره شد');
+                
+            } catch (error) {
+                console.error('❌ Error saving wallet settings:', error);
+                showNotification('خطا', 'خطا در ذخیره تنظیمات', 'error');
+            }
+        }
+        
+        // ============ مدیریت درخواست‌های برداشت ============
+        async function loadWithdrawalRequests(status = 'pending') {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('withdrawal_requests')
+                    .select(`
+                        *,
+                        users (email, full_name)
+                    `)
+                    .eq('status', status)
+                    .order('created_at', { ascending: false })
+                    .limit(50);
+                
+                if (error) throw error;
+                
+                withdrawalRequests = data || [];
+                renderWithdrawalRequests();
+                
+            } catch (error) {
+                console.error('❌ Error loading withdrawal requests:', error);
+                showNotification('خطا', 'خطا در بارگذاری درخواست‌های برداشت', 'error');
+            }
+        }
+        
+        function renderWithdrawalRequests() {
+            const container = document.getElementById('withdrawalRequestsList');
+            if (!container) return;
+            
+            if (withdrawalRequests.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                        <i class="fas fa-check-circle" style="font-size: 48px; margin-bottom: 20px;"></i>
+                        <h3>هیچ درخواست برداشت ${getWithdrawalStatusText('pending')} وجود ندارد</h3>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            withdrawalRequests.forEach(request => {
+                const user = request.users;
+                const card = document.createElement('div');
+                card.className = 'withdrawal-card';
+                card.style.cssText = 'background: rgba(255,255,255,0.05); padding: 15px; border-radius: var(--radius); margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1);';
+                
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                        <div>
+                            <h4 style="margin: 0 0 5px 0;">${user.full_name || user.email}</h4>
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                ${new Date(request.created_at).toLocaleString('fa-IR')}
+                            </div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-size: 18px; font-weight: bold; color: var(--primary);">
+                                ${parseFloat(request.amount).toLocaleString()} ${request.currency}
+                            </div>
+                            <span style="display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; background: ${getWithdrawalStatusColor(request.status)}; color: white; margin-top: 5px;">
+                                ${getWithdrawalStatusText(request.status)}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div style="display: flex; margin-bottom: 8px;">
+                            <div style="width: 100px; color: var(--text-secondary);">آدرس کیف پول:</div>
+                            <div style="flex: 1;">${request.wallet_address}</div>
+                        </div>
+                        <div style="display: flex; margin-bottom: 8px;">
+                            <div style="width: 100px; color: var(--text-secondary);">شبکه:</div>
+                            <div style="flex: 1;">${request.network}</div>
+                        </div>
+                        <div style="display: flex;">
+                            <div style="width: 100px; color: var(--text-secondary);">شماره درخواست:</div>
+                            <div style="flex: 1;">${request.id}</div>
+                        </div>
+                    </div>
+                    
+                    ${request.admin_notes ? `
+                        <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; margin: 10px 0; font-size: 14px;">
+                            <strong>یادداشت ادمین:</strong> ${request.admin_notes}
+                        </div>
+                    ` : ''}
+                    
+                    ${request.status === 'pending' ? `
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button class="btn btn-success btn-sm" onclick="processWithdrawal(${request.id}, 'approved')">
+                                <i class="fas fa-check"></i> تأیید
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="processWithdrawal(${request.id}, 'rejected')">
+                                <i class="fas fa-times"></i> رد
+                            </button>
+                            <button class="btn btn-primary btn-sm" onclick="showWithdrawalNotes(${request.id})">
+                                <i class="fas fa-edit"></i> یادداشت
+                            </button>
+                        </div>
+                    ` : ''}
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        function getWithdrawalStatusText(status) {
+            const statuses = {
+                'pending': 'در انتظار بررسی',
+                'approved': 'تأیید شده',
+                'rejected': 'رد شده',
+                'completed': 'تکمیل شده'
+            };
+            return statuses[status] || status;
+        }
+        
+        function getWithdrawalStatusColor(status) {
+            const colors = {
+                'pending': 'var(--warning)',
+                'approved': 'var(--success)',
+                'rejected': 'var(--error)',
+                'completed': 'var(--primary)'
+            };
+            return colors[status] || 'var(--text-secondary)';
+        }
+        
+        async function processWithdrawal(requestId, status) {
+            const notes = prompt('لطفاً یادداشت اضافه کنید (اختیاری):');
+            
+            try {
+                const { error } = await supabaseClient
+                    .from('withdrawal_requests')
+                    .update({ 
+                        status: status,
+                        admin_notes: notes || '',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', requestId);
+                
+                if (error) throw error;
+                
+                showNotification('موفق', `درخواست برداشت ${getWithdrawalStatusText(status)} شد`);
+                await loadWithdrawalRequests('pending');
+                
+            } catch (error) {
+                console.error('❌ Error processing withdrawal:', error);
+                showNotification('خطا', 'خطا در پردازش درخواست', 'error');
+            }
+        }
+        
+        function showWithdrawalNotes(requestId) {
+            const request = withdrawalRequests.find(r => r.id === requestId);
+            if (!request) return;
+            
+            const notes = prompt('یادداشت برای این درخواست:', request.admin_notes || '');
+            if (notes !== null) {
+                processWithdrawal(requestId, request.status, notes);
+            }
+        }
+        
+        function openWithdrawalManagement() {
+            loadWithdrawalRequests('pending');
+            document.getElementById('withdrawalManagementModal').classList.add('active');
+        }
+        
+        // ============ افزودن لینک به منوی ناوبری ============
+        function addAdminMenuItems() {
+            const navMenu = document.querySelector('.nav-menu');
+            if (!navMenu) return;
+            
+            const walletItem = document.createElement('li');
+            walletItem.innerHTML = `
+                <a href="#" onclick="openWalletSettings()">
+                    <i class="fas fa-wallet"></i> کیف پول و درگاه‌ها
+                </a>
+            `;
+            
+            const withdrawalsItem = document.createElement('li');
+            withdrawalsItem.innerHTML = `
+                <a href="#" onclick="openWithdrawalManagement()">
+                    <i class="fas fa-money-check-alt"></i> مدیریت برداشت‌ها
+                </a>
+            `;
+            
+            // اضافه کردن به منو (قبل از گزینه "بازگشت به بازی")
+            navMenu.insertBefore(walletItem, navMenu.children[navMenu.children.length - 2]);
+            navMenu.insertBefore(withdrawalsItem, navMenu.children[navMenu.children.length - 2]);
+        }
+        
         // ============ توابع کمکی ============
         function formatNumber(num) {
             if (!num && num !== 0) return '0';
@@ -2309,117 +2316,297 @@ setTimeout(addAdminMenuItems, 1000);
             return Math.floor(num).toLocaleString('fa-IR');
         }
     </script>
-    <!-- مودال مدیریت کیف پول و درگاه‌ها -->
-<div class="modal" id="walletSettingsModal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3><i class="fas fa-wallet"></i> تنظیمات کیف پول و درگاه‌ها</h3>
-            <button class="modal-close" onclick="closeModal('walletSettingsModal')">×</button>
+        <!-- مودال مدیریت کیف پول و درگاه‌ها -->
+    <div class="modal" id="walletSettingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-wallet"></i> تنظیمات کیف پول و درگاه‌ها</h3>
+                <button class="modal-close" onclick="closeModal('walletSettingsModal')">×</button>
+            </div>
+            
+            <div class="tabs" style="margin-bottom: 20px;">
+                <div class="tab active" onclick="showWalletTab('paymentGateways')">💳 درگاه‌های پرداخت</div>
+                <div class="tab" onclick="showWalletTab('withdrawalSettings')">💰 تنظیمات برداشت</div>
+                <div class="tab" onclick="showWalletTab('walletLimits')">⚖️ محدودیت‌ها</div>
+            </div>
+            
+            <!-- تب درگاه‌های پرداخت -->
+            <div class="tab-content active" id="paymentGatewaysTab">
+                <div class="form-group">
+                    <label class="form-label">فعال‌سازی درگاه بانکی</label>
+                    <input type="checkbox" id="enableBankGateway" checked>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">شماره کارت بانکی</label>
+                    <input type="text" id="bankCardNumber" class="form-input" placeholder="6037-XXXX-XXXX-XXXX">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">نام دارنده حساب</label>
+                    <input type="text" id="bankAccountHolder" class="form-input" placeholder="نام و نام خانوادگی">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">فعال‌سازی درگاه ارز دیجیتال</label>
+                    <input type="checkbox" id="enableCryptoGateway">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">آدرس کیف پول USDT (TRC20)</label>
+                    <input type="text" id="usdtWalletAddress" class="form-input" placeholder="TXXXX...">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">آدرس کیف پول USDT (BEP20)</label>
+                    <input type="text" id="usdtBep20Address" class="form-input" placeholder="0x...">
+                </div>
+            </div>
+            
+            <!-- تب تنظیمات برداشت -->
+            <div class="tab-content" id="withdrawalSettingsTab">
+                <div class="form-group">
+                    <label class="form-label">حداقل برداشت USDT</label>
+                    <input type="number" id="minWithdrawalUsdt" class="form-input" value="10" step="0.1">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">حداکثر برداشت USDT</label>
+                    <input type="number" id="maxWithdrawalUsdt" class="form-input" value="1000" step="0.1">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">کارمزد برداشت (%)</label>
+                    <input type="number" id="withdrawalFeePercent" class="form-input" value="2" step="0.1">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">زمان پردازش برداشت (ساعت)</label>
+                    <input type="number" id="withdrawalProcessingTime" class="form-input" value="24">
+                </div>
+            </div>
+            
+            <!-- تب محدودیت‌ها -->
+            <div class="tab-content" id="walletLimitsTab">
+                <div class="form-group">
+                    <label class="form-label">حداکثر بوست روزانه</label>
+                    <input type="number" id="maxDailyBoosts" class="form-input" value="3">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">حداکثر خرید پنل روزانه</label>
+                    <input type="number" id="maxDailyPurchases" class="form-input" value="5">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">محدودیت استخراج روزانه (SOD)</label>
+                    <input type="number" id="dailyMiningLimit" class="form-input" value="1000000">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">سقف کیف پول USDT</label>
+                    <input type="number" id="walletUsdtCap" class="form-input" value="10000" step="0.1">
+                </div>
+            </div>
+            
+            <button class="btn btn-success" onclick="saveWalletSettings()" style="width: 100%; margin-top: 20px;">
+                <i class="fas fa-save"></i> ذخیره تنظیمات
+            </button>
         </div>
-        
-        <div class="tabs" style="margin-bottom: 20px;">
-            <div class="tab active" onclick="showWalletTab('paymentGateways')">💳 درگاه‌های پرداخت</div>
-            <div class="tab" onclick="showWalletTab('withdrawalSettings')">💰 تنظیمات برداشت</div>
-            <div class="tab" onclick="showWalletTab('walletLimits')">⚖️ محدودیت‌ها</div>
-        </div>
-        
-        <!-- تب درگاه‌های پرداخت -->
-        <div class="tab-content active" id="paymentGatewaysTab">
-            <div class="form-group">
-                <label class="form-label">فعال‌سازی درگاه بانکی</label>
-                <input type="checkbox" id="enableBankGateway" checked>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">شماره کارت بانکی</label>
-                <input type="text" id="bankCardNumber" class="form-input" placeholder="6037-XXXX-XXXX-XXXX">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">نام دارنده حساب</label>
-                <input type="text" id="bankAccountHolder" class="form-input" placeholder="نام و نام خانوادگی">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">فعال‌سازی درگاه ارز دیجیتال</label>
-                <input type="checkbox" id="enableCryptoGateway">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">آدرس کیف پول USDT (TRC20)</label>
-                <input type="text" id="usdtWalletAddress" class="form-input" placeholder="TXXXX...">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">آدرس کیف پول USDT (BEP20)</label>
-                <input type="text" id="usdtBep20Address" class="form-input" placeholder="0x...">
-            </div>
-        </div>
-        
-        <!-- تب تنظیمات برداشت -->
-        <div class="tab-content" id="withdrawalSettingsTab">
-            <div class="form-group">
-                <label class="form-label">حداقل برداشت USDT</label>
-                <input type="number" id="minWithdrawalUsdt" class="form-input" value="10" step="0.1">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">حداکثر برداشت USDT</label>
-                <input type="number" id="maxWithdrawalUsdt" class="form-input" value="1000" step="0.1">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">کارمزد برداشت (%)</label>
-                <input type="number" id="withdrawalFeePercent" class="form-input" value="2" step="0.1">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">زمان پردازش برداشت (ساعت)</label>
-                <input type="number" id="withdrawalProcessingTime" class="form-input" value="24">
-            </div>
-        </div>
-        
-        <!-- تب محدودیت‌ها -->
-        <div class="tab-content" id="walletLimitsTab">
-            <div class="form-group">
-                <label class="form-label">حداکثر بوست روزانه</label>
-                <input type="number" id="maxDailyBoosts" class="form-input" value="3">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">حداکثر خرید پنل روزانه</label>
-                <input type="number" id="maxDailyPurchases" class="form-input" value="5">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">محدودیت استخراج روزانه (SOD)</label>
-                <input type="number" id="dailyMiningLimit" class="form-input" value="1000000">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">سقف کیف پول USDT</label>
-                <input type="number" id="walletUsdtCap" class="form-input" value="10000" step="0.1">
-            </div>
-        </div>
-        
-        <button class="btn btn-success" onclick="saveWalletSettings()" style="width: 100%; margin-top: 20px;">
-            <i class="fas fa-save"></i> ذخیره تنظیمات
-        </button>
     </div>
-</div>
 
-<!-- مودال مدیریت برداشت‌ها -->
-<div class="modal" id="withdrawalManagementModal">
-    <div class="modal-content" style="max-width: 800px;">
-        <div class="modal-header">
-            <h3><i class="fas fa-money-check-alt"></i> مدیریت درخواست‌های برداشت</h3>
-            <button class="modal-close" onclick="closeModal('withdrawalManagementModal')">×</button>
-        </div>
-        
-        <div id="withdrawalRequestsList">
-            <!-- لیست درخواست‌ها اینجا نمایش داده می‌شود -->
+    <!-- مودال مدیریت برداشت‌ها -->
+    <div class="modal" id="withdrawalManagementModal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-money-check-alt"></i> مدیریت درخواست‌های برداشت</h3>
+                <button class="modal-close" onclick="closeModal('withdrawalManagementModal')">×</button>
+            </div>
+            
+            <div class="tabs" style="margin-bottom: 20px;">
+                <div class="tab active" onclick="showWithdrawalTab('pending')">⏳ در انتظار (${withdrawalRequests.filter(r => r.status === 'pending').length})</div>
+                <div class="tab" onclick="showWithdrawalTab('approved')">✅ تأیید شده</div>
+                <div class="tab" onclick="showWithdrawalTab('rejected')">❌ رد شده</div>
+            </div>
+            
+            <div id="withdrawalRequestsList">
+                <!-- لیست درخواست‌ها اینجا نمایش داده می‌شود -->
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <button class="btn btn-primary" onclick="loadWithdrawalRequests('pending')">
+                    <i class="fas fa-sync"></i> بروزرسانی لیست
+                </button>
+            </div>
         </div>
     </div>
-</div>
+
+    <script>
+        // ============ توابع اضافی برای مدیریت برداشت‌ها ============
+        function showWithdrawalTab(status) {
+            // غیرفعال کردن همه تب‌ها
+            document.querySelectorAll('#withdrawalManagementModal .tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // فعال کردن تب انتخاب شده
+            event.target.classList.add('active');
+            
+            // بارگذاری درخواست‌ها با وضعیت انتخاب شده
+            loadWithdrawalRequests(status);
+        }
+        
+        // ============ استایل‌های اضافی برای کارت‌های برداشت ============
+        const style = document.createElement('style');
+        style.textContent = `
+            .withdrawal-card {
+                background: rgba(255,255,255,0.05);
+                padding: 15px;
+                border-radius: var(--radius);
+                margin-bottom: 15px;
+                border: 1px solid rgba(255,255,255,0.1);
+                transition: all 0.3s;
+            }
+            
+            .withdrawal-card:hover {
+                background: rgba(255,255,255,0.08);
+                border-color: var(--primary);
+            }
+            
+            .withdrawal-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                margin-bottom: 10px;
+            }
+            
+            .withdrawal-user h4 {
+                margin: 0 0 5px 0;
+                color: var(--text);
+            }
+            
+            .withdrawal-amount {
+                text-align: left;
+            }
+            
+            .withdrawal-amount .amount {
+                font-size: 18px;
+                font-weight: bold;
+                color: var(--primary);
+            }
+            
+            .withdrawal-details {
+                margin-top: 15px;
+                padding-top: 15px;
+                border-top: 1px solid rgba(255,255,255,0.1);
+            }
+            
+            .detail {
+                display: flex;
+                margin-bottom: 8px;
+                font-size: 14px;
+            }
+            
+            .detail .label {
+                width: 120px;
+                color: var(--text-secondary);
+            }
+            
+            .detail .value {
+                flex: 1;
+                word-break: break-all;
+            }
+            
+            .withdrawal-actions {
+                display: flex;
+                gap: 10px;
+                margin-top: 15px;
+            }
+            
+            .badge {
+                display: inline-block;
+                padding: 3px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 600;
+                color: white;
+            }
+            
+            .badge-warning {
+                background: var(--warning);
+            }
+            
+            .badge-success {
+                background: var(--success);
+            }
+            
+            .badge-danger {
+                background: var(--error);
+            }
+            
+            .badge-info {
+                background: var(--primary);
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // ============ بارگذاری اولیه تنظیمات کیف پول ============
+        setTimeout(async () => {
+            await loadWalletSettings();
+        }, 1000);
+        
+        // ============ ایجاد تب‌های وضعیت برداشت ============
+        function updateWithdrawalTabs() {
+            const tabs = document.querySelectorAll('#withdrawalManagementModal .tab');
+            if (tabs.length > 0) {
+                const pendingCount = withdrawalRequests.filter(r => r.status === 'pending').length;
+                tabs[0].innerHTML = `⏳ در انتظار (${pendingCount})`;
+            }
+        }
+        
+        // ============ تابع برای بروزرسانی وضعیت درخواست برداشت ============
+        async function updateWithdrawalStatus(requestId, status, notes = '') {
+            try {
+                const { error } = await supabaseClient
+                    .from('withdrawal_requests')
+                    .update({ 
+                        status: status,
+                        admin_notes: notes,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', requestId);
+                
+                if (error) throw error;
+                
+                return true;
+            } catch (error) {
+                console.error('❌ Error updating withdrawal status:', error);
+                return false;
+            }
+        }
+        
+        // ============ تابع برای ایجاد تراکنش برداشت ============
+        async function createWithdrawalTransaction(userId, amount, currency, description = 'برداشت') {
+            try {
+                const { error } = await supabaseClient
+                    .from('transactions')
+                    .insert({
+                        user_id: userId,
+                        type: 'withdrawal',
+                        amount: -Math.abs(amount), // مقدار منفی برای برداشت
+                        currency: currency,
+                        description: description,
+                        status: 'completed'
+                    });
+                
+                if (error) throw error;
+                
+                return true;
+            } catch (error) {
+                console.error('❌ Error creating withdrawal transaction:', error);
+                return false;
+            }
+        }
+    </script>
 </body>
 </html>
