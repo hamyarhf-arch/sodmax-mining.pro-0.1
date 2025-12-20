@@ -186,7 +186,7 @@ class GameService {
         return this.gameData.userLevel;
     }
     
-    // 6. افزایش قدرت استخراج - نسخه اصلاح شده
+  // 6. افزایش قدرت استخراج - نسخه اصلاح شده
 async boostMining() {
     // بررسی محدودیت بوست
     if (this.gameData.boostActive) {
@@ -195,7 +195,7 @@ async boostMining() {
     
     // بررسی تعداد بوست‌های روزانه
     const today = new Date().toISOString().split('T')[0];
-    const boostCountToday = await this.getDailyBoostCount(this.userId, today);
+    const boostCountToday = await window.supabaseService.getDailyBoostCount(this.userId, today);
     
     const maxDailyBoosts = 3; // حداکثر 3 بوست در روز
     if (boostCountToday >= maxDailyBoosts) {
@@ -225,18 +225,18 @@ async boostMining() {
     });
     
     // ثبت استفاده از بوست
-    await this.recordBoostUsage(this.userId);
+    await window.supabaseService.recordBoostUsage(this.userId);
     
     // غیرفعال کردن بوست بعد از 30 دقیقه
     if (this.boostTimeout) {
         clearTimeout(this.boostTimeout);
     }
     
-    this.boostTimeout = setTimeout(() => {
+    this.boostTimeout = setTimeout(async () => {
         this.gameData.boostActive = false;
         this.gameData.miningPower = 10 * this.gameData.userLevel; // بازگشت به حالت عادی
         this.gameData.lastUpdated = new Date().toISOString();
-        this.saveToDatabase();
+        await this.saveToDatabase();
         console.log('⏰ Boost expired');
     }, 30 * 60 * 1000); // 30 دقیقه
     
@@ -248,42 +248,6 @@ async boostMining() {
         multiplier: 3,
         remainingBoosts: maxDailyBoosts - boostCountToday - 1
     };
-}
-
-// تابع جدید: دریافت تعداد بوست‌های روزانه
-async getDailyBoostCount(userId, date) {
-    try {
-        const { data, error } = await window.supabaseClient
-            .from('boost_usage')
-            .select('count')
-            .eq('user_id', userId)
-            .gte('created_at', `${date}T00:00:00.000Z`)
-            .lt('created_at', `${date}T23:59:59.999Z`);
-        
-        if (error) throw error;
-        return data?.length || 0;
-    } catch (error) {
-        console.error('❌ Error getting boost count:', error);
-        return 0;
-    }
-}
-
-// تابع جدید: ثبت استفاده از بوست
-async recordBoostUsage(userId) {
-    try {
-        const { error } = await window.supabaseClient
-            .from('boost_usage')
-            .insert([{
-                user_id: userId,
-                created_at: new Date().toISOString()
-            }]);
-        
-        if (error) throw error;
-        return true;
-    } catch (error) {
-        console.error('❌ Error recording boost usage:', error);
-        return false;
-    }
 }
     
     // 7. دریافت پاداش USDT
