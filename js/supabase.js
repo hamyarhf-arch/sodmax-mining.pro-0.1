@@ -1,4 +1,4 @@
-// js/supabase.js - نسخه اصلاح شده با توابع کیف پول
+// js/supabase.js - نسخه نهایی با تمام توابع
 const SUPABASE_URL = 'https://wxxhulztrxmjqftxcetp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4eGh1bHp0cnhtanFmdHhjZXRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzEwNDcsImV4cCI6MjA4MTY0NzA0N30.iC6Ief8aF-zw66RQRSnLxA-BmAjChQj9xy4HkJpGOA4';
 
@@ -30,7 +30,7 @@ async function getUserFromDB(email) {
 async function createUserInDB(userData) {
     try {
         const newUser = {
-            id: userData.id, // این ID از Supabase Auth می‌آید
+            id: userData.id,
             email: userData.email,
             full_name: userData.fullName || userData.email.split('@')[0],
             sod_balance: 1000000,
@@ -44,10 +44,9 @@ async function createUserInDB(userData) {
             created_at: new Date().toISOString()
         };
         
-        // به جای insert از upsert استفاده کنید
         const { data, error } = await window.supabaseClient
             .from('users')
-            .upsert(newUser, { onConflict: 'id' }) // اگر id تکراری بود، آپدیت کن
+            .upsert(newUser, { onConflict: 'id' })
             .select()
             .single();
         
@@ -67,7 +66,6 @@ async function createUserInDB(userData) {
 // 3. دریافت وضعیت کامل بازی از دیتابیس
 async function getGameStateFromDB(userId) {
     try {
-        // دریافت اطلاعات کاربر
         const { data: user, error: userError } = await window.supabaseClient
             .from('users')
             .select('*')
@@ -267,6 +265,24 @@ async function createUserWalletInDB(userId) {
             return existingWallet;
         }
         
+        // تولید آدرس کیف پول منحصربه‌فرد
+        let walletAddress;
+        let isUnique = false;
+        
+        while (!isUnique) {
+            walletAddress = 'SOD' + Math.random().toString(36).substring(2, 12).toUpperCase();
+            
+            // چک کردن یکتایی آدرس
+            const { data, error } = await window.supabaseClient
+                .from('user_wallets')
+                .select('id')
+                .eq('wallet_address', walletAddress)
+                .maybeSingle();
+            
+            if (error && error.code !== 'PGRST116') throw error;
+            if (!data) isUnique = true;
+        }
+        
         const walletData = {
             user_id: userId,
             sod_balance: 1000000,
@@ -274,7 +290,7 @@ async function createUserWalletInDB(userId) {
             total_deposited_usdt: 0,
             total_withdrawn_usdt: 0,
             pending_withdrawal: 0,
-            wallet_address: 'SOD' + Math.random().toString(36).substring(2, 12).toUpperCase(),
+            wallet_address: walletAddress,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
@@ -286,7 +302,7 @@ async function createUserWalletInDB(userId) {
             .single();
         
         if (error) throw error;
-        console.log('✅ Wallet created for user:', userId);
+        console.log('✅ Wallet created for user:', userId, 'Address:', walletAddress);
         return data;
     } catch (error) {
         console.error('❌ Error creating wallet:', error.message);
@@ -474,17 +490,21 @@ async function updateWithdrawalRequestStatus(requestId, status, adminNotes = '')
 // 20. دریافت تعداد بوست‌های روزانه
 async function getDailyBoostCount(userId, date) {
     try {
+        // استفاده از رنج تاریخ به جای تابع DATE()
+        const startOfDay = `${date}T00:00:00.000Z`;
+        const endOfDay = `${date}T23:59:59.999Z`;
+        
         const { data, error } = await window.supabaseClient
             .from('boost_usage')
-            .select('count')
+            .select('id')
             .eq('user_id', userId)
-            .gte('created_at', `${date}T00:00:00.000Z`)
-            .lt('created_at', `${date}T23:59:59.999Z`);
+            .gte('created_at', startOfDay)
+            .lt('created_at', endOfDay);
         
         if (error) throw error;
         return data?.length || 0;
     } catch (error) {
-        console.error('❌ Error getting boost count:', error.message);
+        console.error('❌ Error getting boost count:', error);
         return 0;
     }
 }
@@ -503,6 +523,121 @@ async function recordBoostUsage(userId) {
         return true;
     } catch (error) {
         console.error('❌ Error recording boost usage:', error.message);
+        return false;
+    }
+}
+
+// 22. دریافت تمام تراکنش‌های کیف پول (برای ادمین)
+async function getAllWalletTransactions(limit = 100, offset = 0) {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('wallet_transactions')
+            .select('*, users(email, full_name)')
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('❌ Error getting all wallet transactions:', error.message);
+        return [];
+    }
+}
+
+// 23. دریافت تمام کیف‌پول‌ها (برای ادمین)
+async function getAllWallets(limit = 100, offset = 0) {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('user_wallets')
+            .select('*, users(email, full_name)')
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('❌ Error getting all wallets:', error.message);
+        return [];
+    }
+}
+
+// 24. افزایش موجودی کاربر (برای ادمین)
+async function adminAddBalance(userId, amount, currency = 'SOD', description = '') {
+    try {
+        const wallet = await getUserWalletFromDB(userId);
+        if (!wallet) throw new Error('کیف پول پیدا نشد');
+        
+        let updateData = {};
+        if (currency === 'USDT') {
+            updateData = {
+                usdt_balance: parseFloat(wallet.usdt_balance) + parseFloat(amount)
+            };
+        } else {
+            updateData = {
+                sod_balance: parseInt(wallet.sod_balance) + parseInt(amount)
+            };
+        }
+        
+        const success = await updateUserWallet(userId, updateData);
+        if (!success) throw new Error('خطا در آپدیت کیف پول');
+        
+        // ثبت تراکنش
+        await addWalletTransactionToDB({
+            userId: userId,
+            type: 'admin_deposit',
+            amount: parseFloat(amount),
+            currency: currency,
+            description: description || `افزایش موجودی توسط ادمین: ${amount} ${currency}`
+        });
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Admin add balance error:', error.message);
+        return false;
+    }
+}
+
+// 25. کاهش موجودی کاربر (برای ادمین)
+async function adminDeductBalance(userId, amount, currency = 'SOD', description = '') {
+    try {
+        const wallet = await getUserWalletFromDB(userId);
+        if (!wallet) throw new Error('کیف پول پیدا نشد');
+        
+        // بررسی موجودی کافی
+        if (currency === 'USDT' && parseFloat(wallet.usdt_balance) < parseFloat(amount)) {
+            throw new Error('موجودی کافی نیست');
+        }
+        
+        if (currency === 'SOD' && parseInt(wallet.sod_balance) < parseInt(amount)) {
+            throw new Error('موجودی کافی نیست');
+        }
+        
+        let updateData = {};
+        if (currency === 'USDT') {
+            updateData = {
+                usdt_balance: parseFloat(wallet.usdt_balance) - parseFloat(amount)
+            };
+        } else {
+            updateData = {
+                sod_balance: parseInt(wallet.sod_balance) - parseInt(amount)
+            };
+        }
+        
+        const success = await updateUserWallet(userId, updateData);
+        if (!success) throw new Error('خطا در آپدیت کیف پول');
+        
+        // ثبت تراکنش
+        await addWalletTransactionToDB({
+            userId: userId,
+            type: 'admin_deduction',
+            amount: -parseFloat(amount),
+            currency: currency,
+            description: description || `کاهش موجودی توسط ادمین: ${amount} ${currency}`
+        });
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Admin deduct balance error:', error.message);
         return false;
     }
 }
@@ -544,6 +679,12 @@ window.supabaseService = {
     getDailyBoostCount,
     recordBoostUsage,
     
+    // ادمین پیشرفته
+    getAllWalletTransactions,
+    getAllWallets,
+    adminAddBalance,
+    adminDeductBalance,
+    
     // ابزارها
     testDBConnection,
     
@@ -551,4 +692,4 @@ window.supabaseService = {
     client: window.supabaseClient
 };
 
-console.log('✅ Supabase Service loaded with Wallet functions');
+console.log('✅ Supabase Service loaded with all functions');
