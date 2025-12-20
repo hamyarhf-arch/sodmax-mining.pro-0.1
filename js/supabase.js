@@ -1,4 +1,4 @@
-// js/supabase.js - نسخه فقط Supabase
+// js/supabase.js - نسخه اصلاح شده با توابع کیف پول
 const SUPABASE_URL = 'https://wxxhulztrxmjqftxcetp.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4eGh1bHp0cnhtanFmdHhjZXRwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzEwNDcsImV4cCI6MjA4MTY0NzA0N30.iC6Ief8aF-zw66RQRSnLxA-BmAjChQj9xy4HkJpGOA4';
 
@@ -27,7 +27,6 @@ async function getUserFromDB(email) {
 }
 
 // 2. ایجاد کاربر جدید در دیتابیس
-// js/supabase.js - نسخه اصلاح شده تابع createUserInDB
 async function createUserInDB(userData) {
     try {
         const newUser = {
@@ -54,6 +53,10 @@ async function createUserInDB(userData) {
         
         if (error) throw error;
         console.log('✅ User upserted in database:', data.id);
+        
+        // ایجاد کیف پول برای کاربر
+        await createUserWalletInDB(data.id);
+        
         return data;
     } catch (error) {
         console.error('❌ Error upserting user:', error.message);
@@ -252,37 +255,46 @@ async function testDBConnection() {
     }
 }
 
-// ============ ایجاد سرویس اصلی ============
-window.supabaseService = {
-    // کاربران
-    getUserFromDB,
-    createUserInDB,
-    updateUserInDB,
-    getAllUsersFromDB,
-    
-    // بازی
-    getGameStateFromDB,
-    saveGameStateToDB,
-    
-    // تراکنش‌ها
-    addTransactionToDB,
-    getUserTransactions,
-    
-    // فروش
-    getSalePlansFromDB,
-    
-    // ادمین
-    getDefaultPlans,
-    
-    // ابزارها
-    testDBConnection,
-    
-    // دسترسی به کلاینت
-    client: window.supabaseClient
-};
+// ============ توابع کیف پول جدید ============
 
-console.log('✅ Supabase Service loaded (Database-Only Mode)');
-// 11. دریافت اطلاعات کیف پول
+// 11. ایجاد کیف پول برای کاربر
+async function createUserWalletInDB(userId) {
+    try {
+        // بررسی وجود کیف پول
+        const existingWallet = await getUserWalletFromDB(userId);
+        if (existingWallet) {
+            console.log('✅ Wallet already exists for user:', userId);
+            return existingWallet;
+        }
+        
+        const walletData = {
+            user_id: userId,
+            sod_balance: 1000000,
+            usdt_balance: 0,
+            total_deposited_usdt: 0,
+            total_withdrawn_usdt: 0,
+            pending_withdrawal: 0,
+            wallet_address: 'SOD' + Math.random().toString(36).substring(2, 12).toUpperCase(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+        
+        const { data, error } = await window.supabaseClient
+            .from('user_wallets')
+            .insert([walletData])
+            .select()
+            .single();
+        
+        if (error) throw error;
+        console.log('✅ Wallet created for user:', userId);
+        return data;
+    } catch (error) {
+        console.error('❌ Error creating wallet:', error.message);
+        return null;
+    }
+}
+
+// 12. دریافت اطلاعات کیف پول
 async function getUserWalletFromDB(userId) {
     try {
         const { data, error } = await window.supabaseClient
@@ -299,7 +311,7 @@ async function getUserWalletFromDB(userId) {
     }
 }
 
-// 12. آپدیت کیف پول
+// 13. آپدیت کیف پول
 async function updateUserWallet(userId, walletData) {
     try {
         const { error } = await window.supabaseClient
@@ -318,7 +330,7 @@ async function updateUserWallet(userId, walletData) {
     }
 }
 
-// 13. ثبت تراکنش کیف پول
+// 14. ثبت تراکنش کیف پول
 async function addWalletTransactionToDB(transaction) {
     try {
         const { error } = await window.supabaseClient
@@ -343,7 +355,7 @@ async function addWalletTransactionToDB(transaction) {
     }
 }
 
-// 14. دریافت درخواست‌های برداشت
+// 15. دریافت درخواست‌های برداشت
 async function getWithdrawalRequestsFromDB(status = 'pending', limit = 50) {
     try {
         const { data, error } = await window.supabaseClient
@@ -361,7 +373,7 @@ async function getWithdrawalRequestsFromDB(status = 'pending', limit = 50) {
     }
 }
 
-// 15. دریافت تنظیمات کیف پول
+// 16. دریافت تنظیمات کیف پول
 async function getWalletSettingsFromDB() {
     try {
         const { data, error } = await window.supabaseClient
@@ -382,3 +394,161 @@ async function getWalletSettingsFromDB() {
         return {};
     }
 }
+
+// 17. آپدیت تنظیمات کیف پول
+async function updateWalletSettings(settings) {
+    try {
+        const updates = [];
+        for (const [key, value] of Object.entries(settings)) {
+            updates.push(
+                window.supabaseClient
+                    .from('wallet_settings')
+                    .upsert({
+                        setting_key: key,
+                        setting_value: value,
+                        updated_at: new Date().toISOString()
+                    })
+            );
+        }
+        
+        await Promise.all(updates);
+        return true;
+    } catch (error) {
+        console.error('❌ Error updating wallet settings:', error.message);
+        return false;
+    }
+}
+
+// 18. ایجاد درخواست برداشت
+async function createWithdrawalRequest(userId, requestData) {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('withdrawal_requests')
+            .insert([{
+                user_id: userId,
+                amount: requestData.amount,
+                currency: requestData.currency || 'USDT',
+                wallet_address: requestData.walletAddress,
+                network: requestData.network || 'TRC20',
+                status: 'pending',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }])
+            .select()
+            .single();
+        
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error('❌ Error creating withdrawal request:', error.message);
+        return null;
+    }
+}
+
+// 19. آپدیت وضعیت درخواست برداشت
+async function updateWithdrawalRequestStatus(requestId, status, adminNotes = '') {
+    try {
+        const updateData = {
+            status: status,
+            admin_notes: adminNotes,
+            updated_at: new Date().toISOString()
+        };
+        
+        if (status === 'completed') {
+            updateData.processed_at = new Date().toISOString();
+        }
+        
+        const { error } = await window.supabaseClient
+            .from('withdrawal_requests')
+            .update(updateData)
+            .eq('id', requestId);
+        
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('❌ Error updating withdrawal request:', error.message);
+        return false;
+    }
+}
+
+// 20. دریافت تعداد بوست‌های روزانه
+async function getDailyBoostCount(userId, date) {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('boost_usage')
+            .select('count')
+            .eq('user_id', userId)
+            .gte('created_at', `${date}T00:00:00.000Z`)
+            .lt('created_at', `${date}T23:59:59.999Z`);
+        
+        if (error) throw error;
+        return data?.length || 0;
+    } catch (error) {
+        console.error('❌ Error getting boost count:', error.message);
+        return 0;
+    }
+}
+
+// 21. ثبت استفاده از بوست
+async function recordBoostUsage(userId) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('boost_usage')
+            .insert([{
+                user_id: userId,
+                created_at: new Date().toISOString()
+            }]);
+        
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('❌ Error recording boost usage:', error.message);
+        return false;
+    }
+}
+
+// ============ ایجاد سرویس اصلی ============
+window.supabaseService = {
+    // کاربران
+    getUserFromDB,
+    createUserInDB,
+    updateUserInDB,
+    getAllUsersFromDB,
+    
+    // بازی
+    getGameStateFromDB,
+    saveGameStateToDB,
+    
+    // تراکنش‌ها
+    addTransactionToDB,
+    getUserTransactions,
+    
+    // فروش
+    getSalePlansFromDB,
+    
+    // ادمین
+    getDefaultPlans,
+    
+    // کیف پول
+    createUserWalletInDB,
+    getUserWalletFromDB,
+    updateUserWallet,
+    addWalletTransactionToDB,
+    getWithdrawalRequestsFromDB,
+    getWalletSettingsFromDB,
+    updateWalletSettings,
+    createWithdrawalRequest,
+    updateWithdrawalRequestStatus,
+    
+    // بوست
+    getDailyBoostCount,
+    recordBoostUsage,
+    
+    // ابزارها
+    testDBConnection,
+    
+    // دسترسی به کلاینت
+    client: window.supabaseClient
+};
+
+console.log('✅ Supabase Service loaded with Wallet functions');
