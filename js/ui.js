@@ -1,4 +1,4 @@
-// js/ui.js - نسخه فقط Supabase
+// js/ui.js - نسخه کامل و اصلاح شده
 class UIService {
     constructor() {
         console.log('🎨 UIService (Supabase-Only) initializing...');
@@ -6,79 +6,20 @@ class UIService {
         this.gameService = null;
         this.authService = null;
         this.supabaseService = null;
+        this.walletService = null;
         this.autoMiningInterval = null;
         this.isInitialized = false;
         this.userId = null;
         
         this.init();
     }
-    // در کلاس UIService، بعد از handleRegister این تابع را اضافه کنید:
-async handleLogin(e) {
-    e.preventDefault();
     
-    const email = document.getElementById('loginEmail');
-    const password = document.getElementById('loginPassword');
-    
-    if (!email || !password) {
-        this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
-        return;
-    }
-    
-    const emailValue = email.value.trim();
-    const passwordValue = password.value.trim();
-    
-    if (!emailValue || !passwordValue) {
-        this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
-        return;
-    }
-    
-    // غیرفعال کردن دکمه
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-    if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ورود...';
-    }
-    
-    try {
-        const result = await this.authService.signIn(emailValue, passwordValue);
-        
-        if (result.success) {
-            this.showNotification('✅', result.message);
-            
-            // اگر کاربر لاگین شده
-            if (this.authService.isUserVerified()) {
-                setTimeout(() => {
-                    const user = this.authService.getCurrentUser();
-                    if (user) {
-                        this.showMainApp(user);
-                    }
-                }, 1000);
-            }
-        } else {
-            this.showNotification('❌', result.error || 'خطا در ورود');
-            
-            // پاک کردن رمز عبور
-            if (password) {
-                password.value = '';
-            }
-        }
-    } catch (error) {
-        console.error('🚨 Error in handleLogin:', error);
-        this.showNotification('❌', 'خطای غیرمنتظره در ورود: ' + error.message);
-    } finally {
-        // فعال کردن دکمه
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به حساب';
-        }
-    }
-}
     async init() {
         console.log('🔄 UIService waiting for services...');
         
         // منتظر سرویس‌ها
         let attempts = 0;
-        while (attempts < 25) {
+        while (attempts < 30) {
             if (window.gameService && window.authService && window.supabaseService) {
                 this.gameService = window.gameService;
                 this.authService = window.authService;
@@ -92,16 +33,17 @@ async handleLogin(e) {
         
         if (!this.gameService) {
             console.error('❌ GameService not available');
-            return;
+        }
+        
+        // چک کردن WalletService (اختیاری)
+        if (window.walletService) {
+            this.walletService = window.walletService;
+            console.log('✅ WalletService loaded');
         }
         
         // بایند کردن events
         this.bindEvents();
-        const loginForm = document.getElementById('loginForm');
-if (loginForm) {
-    loginForm.addEventListener('submit', (e) => this.handleLogin(e));
-    console.log('✅ Login form bound');
-}
+        
         // چک کردن وضعیت auth
         await this.checkAuthState();
         
@@ -149,6 +91,9 @@ if (loginForm) {
             // آپدیت UI
             this.updateGameUI();
             
+            // آپدیت اطلاعات کیف پول
+            await this.updateWalletUI();
+            
             // بارگذاری پنل‌های فروش
             this.loadSalePlans();
             
@@ -192,6 +137,13 @@ if (loginForm) {
     // 4. بایند کردن events
     bindEvents() {
         console.log('🔗 Binding events...');
+        
+        // فرم لاگین
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+            console.log('✅ Login form bound');
+        }
         
         // فرم ثبت‌نام
         const registerForm = document.getElementById('registerForm');
@@ -244,10 +196,89 @@ if (loginForm) {
             console.log('✅ Logout button bound');
         }
         
+        // دکمه‌های کیف پول
+        const depositBtn = document.getElementById('depositBtn');
+        if (depositBtn) {
+            depositBtn.addEventListener('click', () => this.showWalletActions('deposit'));
+        }
+        
+        const withdrawBtn = document.getElementById('withdrawBtn');
+        if (withdrawBtn) {
+            withdrawBtn.addEventListener('click', () => this.showWalletActions('withdraw'));
+        }
+        
+        // دکمه بستن مودال کیف پول
+        const closeWalletModalBtn = document.querySelector('.close-wallet-modal');
+        if (closeWalletModalBtn) {
+            closeWalletModalBtn.addEventListener('click', () => this.closeWalletModal());
+        }
+        
         console.log('✅ All events bound');
     }
     
-    // 5. هندل ثبت‌نام
+    // 5. هندل لاگین
+    async handleLogin(e) {
+        e.preventDefault();
+        
+        const email = document.getElementById('loginEmail');
+        const password = document.getElementById('loginPassword');
+        
+        if (!email || !password) {
+            this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
+            return;
+        }
+        
+        const emailValue = email.value.trim();
+        const passwordValue = password.value.trim();
+        
+        if (!emailValue || !passwordValue) {
+            this.showNotification('❌', 'لطفاً ایمیل و رمز عبور را وارد کنید');
+            return;
+        }
+        
+        // غیرفعال کردن دکمه
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال ورود...';
+        }
+        
+        try {
+            const result = await this.authService.signIn(emailValue, passwordValue);
+            
+            if (result.success) {
+                this.showNotification('✅', result.message);
+                
+                // اگر کاربر لاگین شده
+                if (this.authService.isUserVerified()) {
+                    setTimeout(() => {
+                        const user = this.authService.getCurrentUser();
+                        if (user) {
+                            this.showMainApp(user);
+                        }
+                    }, 1000);
+                }
+            } else {
+                this.showNotification('❌', result.error || 'خطا در ورود');
+                
+                // پاک کردن رمز عبور
+                if (password) {
+                    password.value = '';
+                }
+            }
+        } catch (error) {
+            console.error('🚨 Error in handleLogin:', error);
+            this.showNotification('❌', 'خطای غیرمنتظره در ورود: ' + error.message);
+        } finally {
+            // فعال کردن دکمه
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ورود به حساب';
+            }
+        }
+    }
+    
+    // 6. هندل ثبت‌نام
     async handleRegister(e) {
         e.preventDefault();
         
@@ -321,7 +352,7 @@ if (loginForm) {
         }
     }
     
-    // 6. هندل استخراج
+    // 7. هندل استخراج
     async handleMining() {
         if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
@@ -355,7 +386,7 @@ if (loginForm) {
         }
     }
     
-    // 7. هندل افزایش قدرت
+    // 8. هندل افزایش قدرت
     async handleBoostMining() {
         if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
@@ -373,7 +404,7 @@ if (loginForm) {
         }
     }
     
-    // 8. هندل دریافت USDT
+    // 9. هندل دریافت USDT
     async handleClaimUSDT() {
         if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
@@ -390,47 +421,8 @@ if (loginForm) {
             this.showNotification('❌', error.message || 'خطا در دریافت USDT');
         }
     }
-    // این تابع را به کلاس UIService اضافه کنید
-async checkAdminStatus(user) {
-    try {
-        if (!user) return false;
-        
-        console.log('🔍 Checking admin status for:', user.email);
-        
-        const adminEmails = [
-            'hamyarhf@gmail.com',
-            'admin@sodmax.com', 
-            'test@admin.com'
-        ];
-        
-        const userEmail = user.email.toLowerCase().trim();
-        const isAdmin = adminEmails.includes(userEmail);
-        
-        console.log('👑 Admin status:', isAdmin ? 'ADMIN' : 'USER');
-        
-        // نمایش یا مخفی کردن لینک ادمین
-        const adminLink = document.getElementById('adminLink');
-        if (adminLink) {
-            if (isAdmin) {
-                adminLink.style.display = 'flex';
-                adminLink.style.background = 'rgba(255, 107, 53, 0.3)';
-                adminLink.innerHTML = `
-                    <i class="fas fa-user-shield"></i>
-                    <span class="nav-text">مدیریت</span>
-                `;
-                localStorage.setItem('sodmax_admin', 'true');
-            } else {
-                adminLink.style.display = 'none';
-            }
-        }
-        
-        return isAdmin;
-    } catch (error) {
-        console.error('❌ Error in checkAdminStatus:', error);
-        return false;
-    }
-}
-    // 9. toggle استخراج خودکار
+    
+    // 10. toggle استخراج خودکار
     async toggleAutoMining() {
         if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
@@ -473,7 +465,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 10. نمایش فروش SOD
+    // 11. نمایش فروش SOD
     async showSODSale() {
         if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
@@ -491,7 +483,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 11. هندل خروج
+    // 12. هندل خروج
     async handleLogout() {
         try {
             const result = await this.authService.signOut();
@@ -508,7 +500,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 12. آپدیت UI بازی
+    // 13. آپدیت UI بازی
     updateGameUI() {
         if (!this.gameService) return;
         
@@ -596,7 +588,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 13. نمایش نوتیفیکیشن
+    // 14. نمایش نوتیفیکیشن
     showNotification(title, message) {
         const notification = document.getElementById('notification');
         const notificationTitle = document.getElementById('notificationTitle');
@@ -614,7 +606,7 @@ async checkAdminStatus(user) {
         }, 4000);
     }
     
-    // 14. افکت استخراج
+    // 15. افکت استخراج
     showMiningEffect(amount) {
         const effect = document.createElement('div');
         effect.className = 'mining-effect';
@@ -637,7 +629,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 15. پالس ماینر
+    // 16. پالس ماینر
     pulseMinerCore() {
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
@@ -651,7 +643,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 16. شروع انیمیشن استخراج خودکار
+    // 17. شروع انیمیشن استخراج خودکار
     startAutoMiningAnimation() {
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
@@ -659,7 +651,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 17. توقف انیمیشن استخراج خودکار
+    // 18. توقف انیمیشن استخراج خودکار
     stopAutoMiningAnimation() {
         const minerCore = document.getElementById('minerCore');
         if (minerCore) {
@@ -667,7 +659,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 18. شروع UI auto mining (فقط برای آپدیت UI)
+    // 19. شروع UI auto mining (فقط برای آپدیت UI)
     startUIAutoMining() {
         if (this.autoMiningInterval) {
             clearInterval(this.autoMiningInterval);
@@ -679,7 +671,7 @@ async checkAdminStatus(user) {
         }, 1000);
     }
     
-    // 19. توقف UI auto mining
+    // 20. توقف UI auto mining
     stopUIAutoMining() {
         if (this.autoMiningInterval) {
             clearInterval(this.autoMiningInterval);
@@ -687,7 +679,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 20. بارگذاری پنل‌های فروش
+    // 21. بارگذاری پنل‌های فروش
     async loadSalePlans() {
         const salePlansGrid = document.getElementById('salePlansGrid');
         if (!salePlansGrid) return;
@@ -719,7 +711,7 @@ async checkAdminStatus(user) {
                         <li><i class="fas fa-check" style="color: var(--success);"></i> قدرت استخراج +${plan.discount}%</li>
                     </ul>
                     
-                    <button class="btn ${plan.popular ? 'btn-warning' : 'btn-primary'}" onclick="uiService.buySODPlan(${plan.id})">
+                    <button class="btn ${plan.popular ? 'btn-warning' : 'btn-primary'}" onclick="window.uiService.buySODPlan(${plan.id})">
                         <i class="fas fa-shopping-cart"></i>
                         خرید پنل
                     </button>
@@ -734,7 +726,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 21. خرید پنل SOD
+    // 22. خرید پنل SOD
     async buySODPlan(planId) {
         if (!this.authService?.isUserVerified()) {
             this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
@@ -754,7 +746,7 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 22. بارگذاری تراکنش‌ها
+    // 23. بارگذاری تراکنش‌ها
     async loadTransactions() {
         const transactionsList = document.getElementById('transactionsList');
         if (!transactionsList || !this.userId) return;
@@ -808,35 +800,344 @@ async checkAdminStatus(user) {
         }
     }
     
-    // 23. چک کردن وضعیت ادمین
-    checkAdminStatus(user) {
-        if (!user) return;
-        
-        const adminEmails = [
-            'hamyarhf@gmail.com',
-            'admin@sodmax.com',
-            'test@admin.com'
-        ];
-        
-        const userEmail = user.email.toLowerCase().trim();
-        const isAdmin = adminEmails.includes(userEmail);
-        
-        const adminLink = document.getElementById('adminLink');
-        if (adminLink) {
-            if (isAdmin) {
-                adminLink.style.display = 'flex';
-                adminLink.style.background = 'rgba(255, 107, 53, 0.3)';
-                adminLink.innerHTML = `
-                    <i class="fas fa-user-shield"></i>
-                    <span class="nav-text">مدیریت</span>
-                `;
-            } else {
-                adminLink.style.display = 'none';
+    // 24. چک کردن وضعیت ادمین
+    async checkAdminStatus(user) {
+        try {
+            if (!user) return false;
+            
+            console.log('🔍 Checking admin status for:', user.email);
+            
+            const adminEmails = [
+                'hamyarhf@gmail.com',
+                'admin@sodmax.com', 
+                'test@admin.com'
+            ];
+            
+            const userEmail = user.email.toLowerCase().trim();
+            const isAdmin = adminEmails.includes(userEmail);
+            
+            console.log('👑 Admin status:', isAdmin ? 'ADMIN' : 'USER');
+            
+            // نمایش یا مخفی کردن لینک ادمین
+            const adminLink = document.getElementById('adminLink');
+            if (adminLink) {
+                if (isAdmin) {
+                    adminLink.style.display = 'flex';
+                    adminLink.style.background = 'rgba(255, 107, 53, 0.3)';
+                    adminLink.innerHTML = `
+                        <i class="fas fa-user-shield"></i>
+                        <span class="nav-text">مدیریت</span>
+                    `;
+                    localStorage.setItem('sodmax_admin', 'true');
+                } else {
+                    adminLink.style.display = 'none';
+                }
             }
+            
+            return isAdmin;
+        } catch (error) {
+            console.error('❌ Error in checkAdminStatus:', error);
+            return false;
         }
     }
     
-    // 24. Helper functions
+    // 25. نمایش اقدامات کیف پول
+    async showWalletActions(action) {
+        if (!this.authService?.isUserVerified()) {
+            this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
+            this.showLogin();
+            return;
+        }
+        
+        const modal = document.getElementById('walletActionsModal');
+        const title = document.getElementById('walletModalTitle');
+        const content = document.getElementById('walletActionsContent');
+        
+        if (!modal || !title || !content) {
+            console.error('❌ Wallet modal elements not found');
+            return;
+        }
+        
+        if (action === 'deposit') {
+            title.textContent = '💳 شارژ کیف پول';
+            content.innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">مبلغ (USDT)</label>
+                    <input type="number" id="depositAmountInput" class="form-input" placeholder="10" min="1" step="0.1" value="10">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">روش پرداخت</label>
+                    <select id="paymentMethod" class="form-input">
+                        <option value="bank_transfer">💳 انتقال بانکی</option>
+                        <option value="crypto_usdt">🔗 USDT (TRC20)</option>
+                        <option value="crypto_bep20">🔗 USDT (BEP20)</option>
+                    </select>
+                </div>
+                
+                <div id="paymentDetails">
+                    <div class="payment-info">
+                        <p>💡 پس از انتخاب روش پرداخت، اطلاعات لازم نمایش داده می‌شود.</p>
+                    </div>
+                </div>
+                
+                <button class="btn btn-success" onclick="window.uiService.processDeposit()" style="width: 100%;">
+                    <i class="fas fa-credit-card"></i> ادامه پرداخت
+                </button>
+            `;
+            
+            // گوش دادن به تغییر روش پرداخت
+            setTimeout(() => {
+                const paymentMethod = document.getElementById('paymentMethod');
+                if (paymentMethod) {
+                    paymentMethod.addEventListener('change', (e) => {
+                        this.showPaymentDetails(e.target.value);
+                    });
+                    // نمایش جزئیات پیش‌فرض
+                    this.showPaymentDetails('bank_transfer');
+                }
+            }, 100);
+            
+        } else if (action === 'withdraw') {
+            title.textContent = '💰 برداشت از کیف پول';
+            content.innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">مبلغ برداشت (USDT)</label>
+                    <input type="number" id="withdrawAmountInput" class="form-input" placeholder="10" min="10" step="0.1" value="10">
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                        حداقل برداشت: 10 USDT
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">آدرس کیف پول مقصد</label>
+                    <input type="text" id="withdrawWalletAddress" class="form-input" placeholder="TXXXX... یا 0x...">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">شبکه انتقال</label>
+                    <select id="withdrawNetwork" class="form-input">
+                        <option value="TRC20">TRC20 (تزریون)</option>
+                        <option value="BEP20">BEP20 (بین‌بی)</option>
+                    </select>
+                </div>
+                
+                <div class="withdrawal-info">
+                    <p><i class="fas fa-info-circle"></i> کارمزد برداشت: <strong>2%</strong></p>
+                    <p>⏱ زمان پردازش: <strong>24 ساعت</strong></p>
+                </div>
+                
+                <button class="btn btn-primary" onclick="window.uiService.processWithdrawal()" style="width: 100%;">
+                    <i class="fas fa-paper-plane"></i> ثبت درخواست برداشت
+                </button>
+            `;
+        }
+        
+        modal.style.display = 'flex';
+    }
+    
+    // 26. نمایش جزئیات پرداخت
+    async showPaymentDetails(method) {
+        const detailsDiv = document.getElementById('paymentDetails');
+        if (!detailsDiv) return;
+        
+        const amountInput = document.getElementById('depositAmountInput');
+        const amount = amountInput ? parseFloat(amountInput.value) || 0 : 0;
+        
+        let details = '';
+        
+        if (method === 'bank_transfer') {
+            details = `
+                <div class="payment-info">
+                    <h4><i class="fas fa-university"></i> اطلاعات حساب بانکی</h4>
+                    <div style="margin-top: 10px;">
+                        <p><strong>شماره کارت:</strong> 6037-7994-1234-5678</p>
+                        <p><strong>دارنده حساب:</strong> شرکت SODmAX</p>
+                        <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
+                        <p><strong>توضیحات:</strong> شماره کاربری خود را در توضیحات انتقال ذکر کنید</p>
+                    </div>
+                    <p style="color: var(--warning); margin-top: 15px;">
+                        ⚠️ پس از واریز، فیش پرداختی را برای ما ارسال کنید.
+                    </p>
+                </div>
+            `;
+        } else if (method === 'crypto_usdt') {
+            details = `
+                <div class="payment-info">
+                    <h4><i class="fab fa-usdt"></i> آدرس کیف پول USDT (TRC20)</h4>
+                    <div style="margin-top: 10px;">
+                        <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">TQq6C3qXz7KQ9vL8wZ4Y2x1N</code></p>
+                        <button class="btn btn-sm btn-outline" onclick="window.uiService.copyToClipboard('TQq6C3qXz7KQ9vL8wZ4Y2x1N')" style="margin: 5px 0;">
+                            <i class="fas fa-copy"></i> کپی آدرس
+                        </button>
+                        <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
+                        <p><strong>شبکه:</strong> TRC20 (تزریون) - حتماً انتخاب شود</p>
+                    </div>
+                    <p style="color: var(--warning); margin-top: 15px;">
+                        ⚠️ انتقال از شبکه‌های دیگر باعث از دست رفتن موجودی می‌شود.
+                    </p>
+                </div>
+            `;
+        } else if (method === 'crypto_bep20') {
+            details = `
+                <div class="payment-info">
+                    <h4><i class="fab fa-ethereum"></i> آدرس کیف پول USDT (BEP20)</h4>
+                    <div style="margin-top: 10px;">
+                        <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">0x7a9f3b3c8d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8</code></p>
+                        <button class="btn btn-sm btn-outline" onclick="window.uiService.copyToClipboard('0x7a9f3b3c8d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8')" style="margin: 5px 0;">
+                            <i class="fas fa-copy"></i> کپی آدرس
+                        </button>
+                        <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
+                        <p><strong>شبکه:</strong> BEP20 (بین‌بی) - حتماً انتخاب شود</p>
+                    </div>
+                    <p style="color: var(--warning); margin-top: 15px;">
+                        ⚠️ انتقال از شبکه‌های دیگر باعث از دست رفتن موجودی می‌شود.
+                    </p>
+                </div>
+            `;
+        }
+        
+        detailsDiv.innerHTML = details;
+    }
+    
+    // 27. پردازش شارژ
+    async processDeposit() {
+        const amountInput = document.getElementById('depositAmountInput');
+        const methodSelect = document.getElementById('paymentMethod');
+        
+        if (!amountInput || !methodSelect) {
+            this.showNotification('❌', 'خطا در دریافت اطلاعات');
+            return;
+        }
+        
+        const amount = parseFloat(amountInput.value);
+        const method = methodSelect.value;
+        
+        if (!amount || amount < 1) {
+            this.showNotification('❌', 'لطفاً مبلغ معتبر وارد کنید (حداقل 1 USDT)');
+            return;
+        }
+        
+        try {
+            // نمایش پیام در حال پردازش
+            this.showNotification('💳', `درخواست شارژ ${amount} USDT ثبت شد...`);
+            
+            // بستن مودال
+            this.closeWalletModal();
+            
+            // نمایش اطلاعات پرداخت
+            let paymentInfo = '';
+            if (method === 'bank_transfer') {
+                paymentInfo = 'لطفاً مبلغ را به شماره کارت اعلام شده واریز کنید و فیش را ارسال نمایید.';
+            } else if (method === 'crypto_usdt') {
+                paymentInfo = `لطفاً ${amount} USDT را به آدرس TRC20 ارسال کنید.`;
+            } else if (method === 'crypto_bep20') {
+                paymentInfo = `لطفاً ${amount} USDT را به آدرس BEP20 ارسال کنید.`;
+            }
+            
+            setTimeout(() => {
+                this.showNotification('📋', `${paymentInfo} پس از تأیید، موجودی شما افزایش می‌یابد.`);
+            }, 1000);
+            
+        } catch (error) {
+            console.error('❌ Deposit error:', error);
+            this.showNotification('❌', 'خطا در ثبت درخواست شارژ');
+        }
+    }
+    
+    // 28. پردازش برداشت
+    async processWithdrawal() {
+        const amountInput = document.getElementById('withdrawAmountInput');
+        const addressInput = document.getElementById('withdrawWalletAddress');
+        const networkSelect = document.getElementById('withdrawNetwork');
+        
+        if (!amountInput || !addressInput || !networkSelect) {
+            this.showNotification('❌', 'خطا در دریافت اطلاعات');
+            return;
+        }
+        
+        const amount = parseFloat(amountInput.value);
+        const address = addressInput.value.trim();
+        const network = networkSelect.value;
+        
+        if (!amount || amount < 10) {
+            this.showNotification('❌', 'حداقل برداشت 10 USDT می‌باشد');
+            return;
+        }
+        
+        if (!address || address.length < 10) {
+            this.showNotification('❌', 'لطفاً آدرس کیف پول معتبر وارد کنید');
+            return;
+        }
+        
+        try {
+            // استفاده از WalletService
+            if (this.walletService) {
+                const result = await this.walletService.requestWithdrawal(
+                    this.userId,
+                    amount,
+                    'USDT',
+                    address,
+                    network
+                );
+                
+                if (result.success) {
+                    this.showNotification('✅', `درخواست برداشت ${amount} USDT ثبت شد. زمان پردازش: ${result.processingTime || '24'} ساعت`);
+                    this.closeWalletModal();
+                    this.updateGameUI();
+                } else {
+                    this.showNotification('❌', result.error || 'خطا در ثبت درخواست برداشت');
+                }
+            } else {
+                this.showNotification('❌', 'سرویس کیف پول در دسترس نیست');
+            }
+        } catch (error) {
+            console.error('❌ Withdrawal error:', error);
+            this.showNotification('❌', error.message || 'خطا در ثبت درخواست برداشت');
+        }
+    }
+    
+    // 29. بستن مودال کیف پول
+    closeWalletModal() {
+        const modal = document.getElementById('walletActionsModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+    
+    // 30. کپی به کلیپ‌بورد
+    copyToClipboard(text) {
+        navigator.clipboard.writeText(text)
+            .then(() => this.showNotification('✅', 'آدرس کپی شد'))
+            .catch(() => this.showNotification('❌', 'خطا در کپی کردن'));
+    }
+    
+    // 31. آپدیت اطلاعات کیف پول در UI
+    async updateWalletUI() {
+        if (!this.userId || !this.walletService) return;
+        
+        try {
+            // دریافت اطلاعات کیف پول
+            const walletInfo = await this.walletService.getWalletStats(this.userId);
+            if (walletInfo) {
+                // آدرس کیف پول
+                const walletAddressEl = document.getElementById('walletAddress');
+                if (walletAddressEl) {
+                    walletAddressEl.textContent = walletInfo.walletAddress || 'آدرس نامشخص';
+                }
+                
+                // تعداد تراکنش‌ها
+                const transactionCountEl = document.getElementById('walletTransactionCount');
+                if (transactionCountEl) {
+                    transactionCountEl.textContent = walletInfo.transactionsCount.toLocaleString('fa-IR');
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error updating wallet UI:', error);
+        }
+    }
+    
+    // 32. Helper functions
     isValidEmail(email) {
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return re.test(email);
@@ -860,7 +1161,9 @@ async checkAdminStatus(user) {
             'usdt_reward': '💰',
             'purchase': '🛒',
             'boost': '⚡',
-            'withdrawal': '💳'
+            'withdrawal': '💳',
+            'deposit': '💳',
+            'transfer': '🔄'
         };
         return icons[type] || '📝';
     }
@@ -871,7 +1174,9 @@ async checkAdminStatus(user) {
             'usdt_reward': 'پاداش USDT',
             'purchase': 'خرید پنل',
             'boost': 'افزایش قدرت',
-            'withdrawal': 'برداشت'
+            'withdrawal': 'برداشت',
+            'deposit': 'شارژ کیف پول',
+            'transfer': 'انتقال'
         };
         return texts[type] || type;
     }
@@ -884,493 +1189,3 @@ window.uiService = new UIService();
 document.addEventListener('DOMContentLoaded', () => {
     console.log('📄 DOM loaded, UI service active');
 });
-// 25. نمایش اقدامات کیف پول
-async showWalletActions(action) {
-    if (!this.authService?.isUserVerified()) {
-        this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
-        this.showLogin();
-        return;
-    }
-    
-    const modal = document.getElementById('walletActionsModal');
-    const title = document.getElementById('walletModalTitle');
-    const content = document.getElementById('walletActionsContent');
-    
-    if (action === 'deposit') {
-        title.textContent = '💳 شارژ کیف پول';
-        content.innerHTML = `
-            <div class="form-group">
-                <label class="form-label">مبلغ (USDT)</label>
-                <input type="number" id="depositAmountInput" class="form-input" placeholder="10" min="1" step="0.1">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">روش پرداخت</label>
-                <select id="paymentMethod" class="form-input">
-                    <option value="bank_transfer">💳 انتقال بانکی</option>
-                    <option value="crypto_usdt">🔗 USDT (TRC20)</option>
-                    <option value="crypto_bep20">🔗 USDT (BEP20)</option>
-                </select>
-            </div>
-            
-            <div id="paymentDetails">
-                <div class="payment-info" style="background: rgba(0,102,255,0.1); padding: 15px; border-radius: 8px; margin: 15px 0;">
-                    <p>💡 پس از انتخاب روش پرداخت، اطلاعات لازم نمایش داده می‌شود.</p>
-                </div>
-            </div>
-            
-            <button class="btn btn-success" onclick="uiService.processDeposit()" style="width: 100%;">
-                <i class="fas fa-credit-card"></i> ادامه پرداخت
-            </button>
-        `;
-        
-        // گوش دادن به تغییر روش پرداخت
-        document.getElementById('paymentMethod').addEventListener('change', (e) => {
-            this.showPaymentDetails(e.target.value);
-        });
-        
-    } else if (action === 'withdraw') {
-        title.textContent = '💰 برداشت از کیف پول';
-        content.innerHTML = `
-            <div class="form-group">
-                <label class="form-label">مبلغ برداشت (USDT)</label>
-                <input type="number" id="withdrawAmountInput" class="form-input" placeholder="10" min="10" step="0.1">
-                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                    حداقل برداشت: 10 USDT
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">آدرس کیف پول مقصد</label>
-                <input type="text" id="withdrawWalletAddress" class="form-input" placeholder="TXXXX... یا 0x...">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">شبکه انتقال</label>
-                <select id="withdrawNetwork" class="form-input">
-                    <option value="TRC20">TRC20 (تزریون)</option>
-                    <option value="BEP20">BEP20 (بین‌بی)</option>
-                </select>
-            </div>
-            
-            <div class="withdrawal-info" style="background: rgba(255,179,0,0.1); padding: 15px; border-radius: 8px; margin: 15px 0;">
-                <p><i class="fas fa-info-circle"></i> کارمزد برداشت: <strong>2%</strong></p>
-                <p>⏱ زمان پردازش: <strong>24 ساعت</strong></p>
-            </div>
-            
-            <button class="btn btn-primary" onclick="uiService.processWithdrawal()" style="width: 100%;">
-                <i class="fas fa-paper-plane"></i> ثبت درخواست برداشت
-            </button>
-        `;
-    }
-    
-    modal.style.display = 'flex';
-}
-
-// 26. نمایش جزئیات پرداخت
-async showPaymentDetails(method) {
-    const detailsDiv = document.getElementById('paymentDetails');
-    
-    let details = '';
-    
-    if (method === 'bank_transfer') {
-        details = `
-            <div class="payment-info" style="background: rgba(0,212,170,0.1); padding: 15px; border-radius: 8px;">
-                <h4><i class="fas fa-university"></i> اطلاعات حساب بانکی</h4>
-                <div style="margin-top: 10px;">
-                    <p><strong>شماره کارت:</strong> 6037-XXXX-XXXX-XXXX</p>
-                    <p><strong>دارنده حساب:</strong> شرکت SODmAX</p>
-                    <p><strong>مبلغ:</strong> <span id="finalAmount">0</span> USDT</p>
-                    <p><strong>توضیحات:</strong> شماره کاربری خود را در توضیحات انتقال ذکر کنید</p>
-                </div>
-                <p style="color: var(--warning); margin-top: 15px;">
-                    ⚠️ پس از واریز، فیش پرداختی را برای ما ارسال کنید.
-                </p>
-            </div>
-        `;
-    } else if (method === 'crypto_usdt') {
-        details = `
-            <div class="payment-info" style="background: rgba(38,161,123,0.1); padding: 15px; border-radius: 8px;">
-                <h4><i class="fab fa-usdt"></i> آدرس کیف پول USDT (TRC20)</h4>
-                <div style="margin-top: 10px;">
-                    <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px;">TXXXXXXXXXXXXXX</code></p>
-                    <button class="btn btn-sm btn-outline" onclick="copyToClipboard('TXXXXXXXXXXXXXX')">
-                        <i class="fas fa-copy"></i> کپی آدرس
-                    </button>
-                    <p><strong>مبلغ:</strong> <span id="finalAmount">0</span> USDT</p>
-                    <p><strong>شبکه:</strong> TRC20 (تزریون) - حتماً انتخاب شود</p>
-                </div>
-                <p style="color: var(--warning); margin-top: 15px;">
-                    ⚠️ انتقال از شبکه‌های دیگر باعث از دست رفتن موجودی می‌شود.
-                </p>
-            </div>
-        `;
-    }
-    
-    detailsDiv.innerHTML = details;
-}
-
-// 27. پردازش شارژ
-async processDeposit() {
-    const amountInput = document.getElementById('depositAmountInput');
-    const methodSelect = document.getElementById('paymentMethod');
-    
-    if (!amountInput || !methodSelect) return;
-    
-    const amount = parseFloat(amountInput.value);
-    const method = methodSelect.value;
-    
-    if (!amount || amount < 1) {
-        this.showNotification('❌', 'لطفاً مبلغ معتبر وارد کنید');
-        return;
-    }
-    
-    try {
-        // در اینجا باید به درگاه پرداخت متصل شوید
-        // این یک نمونه ساده است
-        
-        let paymentInfo = '';
-        if (method === 'bank_transfer') {
-            paymentInfo = 'لطفاً مبلغ را به شماره کارت اعلام شده واریز کنید و فیش را ارسال نمایید.';
-        } else if (method === 'crypto_usdt') {
-            paymentInfo = `لطفاً ${amount} USDT را به آدرس TRC20 ارسال کنید.`;
-        }
-        
-        this.showNotification('💳', `درخواست شارژ ${amount} USDT ثبت شد. ${paymentInfo}`);
-        this.closeWalletModal();
-        
-    } catch (error) {
-        console.error('❌ Deposit error:', error);
-        this.showNotification('❌', 'خطا در ثبت درخواست شارژ');
-    }
-}
-
-// 28. پردازش برداشت
-async processWithdrawal() {
-    const amountInput = document.getElementById('withdrawAmountInput');
-    const addressInput = document.getElementById('withdrawWalletAddress');
-    const networkSelect = document.getElementById('withdrawNetwork');
-    
-    if (!amountInput || !addressInput || !networkSelect) return;
-    
-    const amount = parseFloat(amountInput.value);
-    const address = addressInput.value.trim();
-    const network = networkSelect.value;
-    
-    if (!amount || amount < 10) {
-        this.showNotification('❌', 'حداقل برداشت 10 USDT می‌باشد');
-        return;
-    }
-    
-    if (!address || address.length < 10) {
-        this.showNotification('❌', 'لطفاً آدرس کیف پول معتبر وارد کنید');
-        return;
-    }
-    
-    try {
-        // استفاده از WalletService
-        if (window.walletService) {
-            const result = await window.walletService.requestWithdrawal(
-                this.userId,
-                amount,
-                'USDT',
-                address,
-                network
-            );
-            
-            this.showNotification('✅', `درخواست برداشت ${amount} USDT ثبت شد. زمان پردازش: 24 ساعت`);
-            this.closeWalletModal();
-            this.updateGameUI();
-        } else {
-            this.showNotification('❌', 'سرویس کیف پول در دسترس نیست');
-        }
-    } catch (error) {
-        console.error('❌ Withdrawal error:', error);
-        this.showNotification('❌', error.message || 'خطا در ثبت درخواست برداشت');
-    }
-}
-
-// 29. بستن مودال کیف پول
-closeWalletModal() {
-    const modal = document.getElementById('walletActionsModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-// 30. کپی به کلیپ‌بورد
-copyToClipboard(text) {
-    navigator.clipboard.writeText(text)
-        .then(() => this.showNotification('✅', 'آدرس کپی شد'))
-        .catch(() => this.showNotification('❌', 'خطا در کپی کردن'));
-}
-// 31. نمایش مودال کیف پول
-showWalletModal(action) {
-    if (!this.authService?.isUserVerified()) {
-        this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
-        this.showLogin();
-        return;
-    }
-    
-    const modal = document.getElementById('walletActionsModal');
-    const title = document.getElementById('walletModalTitle');
-    const content = document.getElementById('walletActionsContent');
-    
-    if (!modal || !title || !content) {
-        console.error('❌ Wallet modal elements not found');
-        return;
-    }
-    
-    if (action === 'deposit') {
-        title.textContent = '💳 شارژ کیف پول';
-        content.innerHTML = `
-            <div class="form-group">
-                <label class="form-label">مبلغ (USDT)</label>
-                <input type="number" id="depositAmountInput" class="form-input" placeholder="10" min="1" step="0.1" value="10">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">روش پرداخت</label>
-                <select id="paymentMethod" class="form-input">
-                    <option value="bank_transfer">💳 انتقال بانکی</option>
-                    <option value="crypto_usdt">🔗 USDT (TRC20)</option>
-                    <option value="crypto_bep20">🔗 USDT (BEP20)</option>
-                </select>
-            </div>
-            
-            <div id="paymentDetails">
-                <div class="payment-info">
-                    <p>💡 پس از انتخاب روش پرداخت، اطلاعات لازم نمایش داده می‌شود.</p>
-                </div>
-            </div>
-            
-            <button class="btn btn-success" onclick="uiService.processDeposit()" style="width: 100%;">
-                <i class="fas fa-credit-card"></i> ادامه پرداخت
-            </button>
-        `;
-        
-        // گوش دادن به تغییر روش پرداخت
-        setTimeout(() => {
-            const paymentMethod = document.getElementById('paymentMethod');
-            if (paymentMethod) {
-                paymentMethod.addEventListener('change', (e) => {
-                    this.showPaymentDetails(e.target.value);
-                });
-                // نمایش جزئیات پیش‌فرض
-                this.showPaymentDetails('bank_transfer');
-            }
-        }, 100);
-        
-    } else if (action === 'withdraw') {
-        title.textContent = '💰 برداشت از کیف پول';
-        content.innerHTML = `
-            <div class="form-group">
-                <label class="form-label">مبلغ برداشت (USDT)</label>
-                <input type="number" id="withdrawAmountInput" class="form-input" placeholder="10" min="10" step="0.1" value="10">
-                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                    حداقل برداشت: 10 USDT
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">آدرس کیف پول مقصد</label>
-                <input type="text" id="withdrawWalletAddress" class="form-input" placeholder="TXXXX... یا 0x...">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">شبکه انتقال</label>
-                <select id="withdrawNetwork" class="form-input">
-                    <option value="TRC20">TRC20 (تزریون)</option>
-                    <option value="BEP20">BEP20 (بین‌بی)</option>
-                </select>
-            </div>
-            
-            <div class="withdrawal-info">
-                <p><i class="fas fa-info-circle"></i> کارمزد برداشت: <strong>2%</strong></p>
-                <p>⏱ زمان پردازش: <strong>24 ساعت</strong></p>
-            </div>
-            
-            <button class="btn btn-primary" onclick="uiService.processWithdrawal()" style="width: 100%;">
-                <i class="fas fa-paper-plane"></i> ثبت درخواست برداشت
-            </button>
-        `;
-    }
-    
-    modal.style.display = 'flex';
-}
-
-// 32. نمایش جزئیات پرداخت
-async showPaymentDetails(method) {
-    const detailsDiv = document.getElementById('paymentDetails');
-    if (!detailsDiv) return;
-    
-    const amountInput = document.getElementById('depositAmountInput');
-    const amount = amountInput ? parseFloat(amountInput.value) || 0 : 0;
-    
-    let details = '';
-    
-    if (method === 'bank_transfer') {
-        details = `
-            <div class="payment-info">
-                <h4><i class="fas fa-university"></i> اطلاعات حساب بانکی</h4>
-                <div style="margin-top: 10px;">
-                    <p><strong>شماره کارت:</strong> 6037-7994-1234-5678</p>
-                    <p><strong>دارنده حساب:</strong> شرکت SODmAX</p>
-                    <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
-                    <p><strong>توضیحات:</strong> شماره کاربری خود را در توضیحات انتقال ذکر کنید</p>
-                </div>
-                <p style="color: var(--warning); margin-top: 15px;">
-                    ⚠️ پس از واریز، فیش پرداختی را برای ما ارسال کنید.
-                </p>
-            </div>
-        `;
-    } else if (method === 'crypto_usdt') {
-        details = `
-            <div class="payment-info">
-                <h4><i class="fab fa-usdt"></i> آدرس کیف پول USDT (TRC20)</h4>
-                <div style="margin-top: 10px;">
-                    <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">TQq6C3qXz7KQ9vL8wZ4Y2x1N</code></p>
-                    <button class="btn btn-sm btn-outline" onclick="uiService.copyToClipboard('TQq6C3qXz7KQ9vL8wZ4Y2x1N')" style="margin: 5px 0;">
-                        <i class="fas fa-copy"></i> کپی آدرس
-                    </button>
-                    <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
-                    <p><strong>شبکه:</strong> TRC20 (تزریون) - حتماً انتخاب شود</p>
-                </div>
-                <p style="color: var(--warning); margin-top: 15px;">
-                    ⚠️ انتقال از شبکه‌های دیگر باعث از دست رفتن موجودی می‌شود.
-                </p>
-            </div>
-        `;
-    } else if (method === 'crypto_bep20') {
-        details = `
-            <div class="payment-info">
-                <h4><i class="fab fa-ethereum"></i> آدرس کیف پول USDT (BEP20)</h4>
-                <div style="margin-top: 10px;">
-                    <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">0x7a9f3b3c8d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8</code></p>
-                    <button class="btn btn-sm btn-outline" onclick="uiService.copyToClipboard('0x7a9f3b3c8d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8')" style="margin: 5px 0;">
-                        <i class="fas fa-copy"></i> کپی آدرس
-                    </button>
-                    <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
-                    <p><strong>شبکه:</strong> BEP20 (بین‌بی) - حتماً انتخاب شود</p>
-                </div>
-                <p style="color: var(--warning); margin-top: 15px;">
-                    ⚠️ انتقال از شبکه‌های دیگر باعث از دست رفتن موجودی می‌شود.
-                </p>
-            </div>
-        `;
-    }
-    
-    detailsDiv.innerHTML = details;
-}
-
-// 33. پردازش شارژ
-async processDeposit() {
-    const amountInput = document.getElementById('depositAmountInput');
-    const methodSelect = document.getElementById('paymentMethod');
-    
-    if (!amountInput || !methodSelect) {
-        this.showNotification('❌', 'خطا در دریافت اطلاعات');
-        return;
-    }
-    
-    const amount = parseFloat(amountInput.value);
-    const method = methodSelect.value;
-    
-    if (!amount || amount < 1) {
-        this.showNotification('❌', 'لطفاً مبلغ معتبر وارد کنید (حداقل 1 USDT)');
-        return;
-    }
-    
-    try {
-        // نمایش پیام در حال پردازش
-        this.showNotification('💳', `درخواست شارژ ${amount} USDT ثبت شد...`);
-        
-        // بستن مودال
-        this.closeWalletModal();
-        
-        // نمایش اطلاعات پرداخت
-        let paymentInfo = '';
-        if (method === 'bank_transfer') {
-            paymentInfo = 'لطفاً مبلغ را به شماره کارت اعلام شده واریز کنید و فیش را ارسال نمایید.';
-        } else if (method === 'crypto_usdt') {
-            paymentInfo = `لطفاً ${amount} USDT را به آدرس TRC20 ارسال کنید.`;
-        } else if (method === 'crypto_bep20') {
-            paymentInfo = `لطفاً ${amount} USDT را به آدرس BEP20 ارسال کنید.`;
-        }
-        
-        setTimeout(() => {
-            this.showNotification('📋', `${paymentInfo} پس از تأیید، موجودی شما افزایش می‌یابد.`);
-        }, 1000);
-        
-    } catch (error) {
-        console.error('❌ Deposit error:', error);
-        this.showNotification('❌', 'خطا در ثبت درخواست شارژ');
-    }
-}
-
-// 34. پردازش برداشت
-async processWithdrawal() {
-    const amountInput = document.getElementById('withdrawAmountInput');
-    const addressInput = document.getElementById('withdrawWalletAddress');
-    const networkSelect = document.getElementById('withdrawNetwork');
-    
-    if (!amountInput || !addressInput || !networkSelect) {
-        this.showNotification('❌', 'خطا در دریافت اطلاعات');
-        return;
-    }
-    
-    const amount = parseFloat(amountInput.value);
-    const address = addressInput.value.trim();
-    const network = networkSelect.value;
-    
-    if (!amount || amount < 10) {
-        this.showNotification('❌', 'حداقل برداشت 10 USDT می‌باشد');
-        return;
-    }
-    
-    if (!address || address.length < 10) {
-        this.showNotification('❌', 'لطفاً آدرس کیف پول معتبر وارد کنید');
-        return;
-    }
-    
-    try {
-        // استفاده از WalletService
-        if (window.walletService) {
-            const result = await window.walletService.requestWithdrawal(
-                this.userId,
-                amount,
-                'USDT',
-                address,
-                network
-            );
-            
-            if (result.success) {
-                this.showNotification('✅', `درخواست برداشت ${amount} USDT ثبت شد. زمان پردازش: ${result.processingTime} ساعت`);
-                this.closeWalletModal();
-                this.updateGameUI();
-            } else {
-                this.showNotification('❌', result.error || 'خطا در ثبت درخواست برداشت');
-            }
-        } else {
-            this.showNotification('❌', 'سرویس کیف پول در دسترس نیست');
-        }
-    } catch (error) {
-        console.error('❌ Withdrawal error:', error);
-        this.showNotification('❌', error.message || 'خطا در ثبت درخواست برداشت');
-    }
-}
-
-// 35. بستن مودال کیف پول
-closeWalletModal() {
-    const modal = document.getElementById('walletActionsModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-// 36. کپی به کلیپ‌بورد
-copyToClipboard(text) {
-    navigator.clipboard.writeText(text)
-        .then(() => this.showNotification('✅', 'آدرس کپی شد'))
-        .catch(() => this.showNotification('❌', 'خطا در کپی کردن'));
-}
