@@ -1,57 +1,19 @@
-// js/wallet.js - سیستم کیف پول کاربران
+// js/wallet.js - سیستم کیف پول کاربران (نسخه سازگار)
 class WalletService {
     constructor() {
         console.log('💰 WalletService initializing...');
         this.supabase = window.supabaseClient;
+        this.supabaseService = window.supabaseService;
     }
 
     // 1. ایجاد کیف پول برای کاربر جدید
     async createUserWallet(userId) {
-        try {
-            const walletData = {
-                user_id: userId,
-                sod_balance: 1000000, // مقدار اولیه
-                usdt_balance: 0,
-                total_deposited_usdt: 0,
-                total_withdrawn_usdt: 0,
-                wallet_address: this.generateWalletAddress(),
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            };
-
-            const { data, error } = await this.supabase
-                .from('user_wallets')
-                .insert([walletData]);
-
-            if (error) throw error;
-            console.log('✅ Wallet created for user:', userId);
-            return data[0];
-        } catch (error) {
-            console.error('❌ Error creating wallet:', error);
-            return null;
-        }
+        return await this.supabaseService.createUserWalletInDB(userId);
     }
 
     // 2. دریافت کیف پول کاربر
     async getUserWallet(userId) {
-        try {
-            const { data, error } = await this.supabase
-                .from('user_wallets')
-                .select('*')
-                .eq('user_id', userId)
-                .single();
-
-            if (error && error.code !== 'PGRST116') throw error;
-            
-            if (!data) {
-                return await this.createUserWallet(userId);
-            }
-            
-            return data;
-        } catch (error) {
-            console.error('❌ Error getting wallet:', error);
-            return null;
-        }
+        return await this.supabaseService.getUserWalletFromDB(userId);
     }
 
     // 3. شارژ کیف پول
@@ -74,29 +36,19 @@ class WalletService {
                 };
             }
 
-            const { error: updateError } = await this.supabase
-                .from('user_wallets')
-                .update(updateData)
-                .eq('user_id', userId);
-
-            if (updateError) throw updateError;
+            const success = await this.supabaseService.updateUserWallet(userId, updateData);
+            if (!success) throw new Error('خطا در آپدیت کیف پول');
 
             // ثبت تراکنش شارژ
-            const { error: transError } = await this.supabase
-                .from('wallet_transactions')
-                .insert([{
-                    user_id: userId,
-                    type: 'deposit',
-                    amount: parseFloat(amount),
-                    currency: currency,
-                    payment_method: paymentMethod,
-                    transaction_id: transactionId,
-                    status: 'completed',
-                    description: `شارژ کیف پول از طریق ${paymentMethod}`,
-                    created_at: new Date().toISOString()
-                }]);
-
-            if (transError) throw transError;
+            await this.supabaseService.addWalletTransactionToDB({
+                userId: userId,
+                type: 'deposit',
+                amount: parseFloat(amount),
+                currency: currency,
+                paymentMethod: paymentMethod,
+                transactionId: transactionId,
+                description: `شارژ کیف پول از طریق ${paymentMethod}`
+            });
 
             console.log(`✅ Deposit successful: ${amount} ${currency} for user ${userId}`);
             return true;
@@ -117,27 +69,15 @@ class WalletService {
                 throw new Error('موجودی کافی نیست');
             }
 
-            if (currency === 'SOD' && parseInt(wallet.sod_balance) < parseInt(amount)) {
-                throw new Error('موجودی کافی نیست');
-            }
-
             // ایجاد درخواست برداشت
-            const { data, error } = await this.supabase
-                .from('withdrawal_requests')
-                .insert([{
-                    user_id: userId,
-                    amount: parseFloat(amount),
-                    currency: currency,
-                    wallet_address: walletAddress,
-                    network: network,
-                    status: 'pending', // pending, approved, rejected, completed
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                }])
-                .select()
-                .single();
+            const request = await this.supabaseService.createWithdrawalRequest(userId, {
+                amount: amount,
+                currency: currency,
+                walletAddress: walletAddress,
+                network: network
+            });
 
-            if (error) throw error;
+            if (!request) throw new Error('خطا در ایجاد درخواست');
 
             // کاهش موجودی موقت (تا زمان تأیید ادمین)
             let updateData = {};
@@ -148,15 +88,10 @@ class WalletService {
                 };
             }
 
-            const { error: updateError } = await this.supabase
-                .from('user_wallets')
-                .update(updateData)
-                .eq('user_id', userId);
-
-            if (updateError) throw updateError;
+            await this.supabaseService.updateUserWallet(userId, updateData);
 
             console.log(`✅ Withdrawal requested: ${amount} ${currency} for user ${userId}`);
-            return data;
+            return request;
         } catch (error) {
             console.error('❌ Withdrawal request error:', error);
             throw error;
@@ -194,48 +129,34 @@ class WalletService {
             if (reqError) throw reqError;
 
             // آپدیت وضعیت
-            const { error: updateError } = await this.supabase
-                .from('withdrawal_requests')
-                .update({
-                    status: status,
-                    admin_notes: adminNotes,
-                    processed_at: status === 'completed' ? new Date().toISOString() : null,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', requestId);
-
-            if (updateError) throw updateError;
+            const success = await this.supabaseService.updateWithdrawalRequestStatus(requestId, status, adminNotes);
+            if (!success) throw new Error('خطا در آپدیت وضعیت');
 
             // اگر رد شد، بازگرداندن موجودی
             if (status === 'rejected') {
                 const wallet = await this.getUserWallet(request.user_id);
-                let updateData = {};
-                if (request.currency === 'USDT') {
-                    updateData = {
-                        usdt_balance: parseFloat(wallet.usdt_balance) + parseFloat(request.amount),
-                        pending_withdrawal: parseFloat(wallet.pending_withdrawal || 0) - parseFloat(request.amount)
-                    };
-                }
+                if (wallet) {
+                    let updateData = {};
+                    if (request.currency === 'USDT') {
+                        updateData = {
+                            usdt_balance: parseFloat(wallet.usdt_balance) + parseFloat(request.amount),
+                            pending_withdrawal: parseFloat(wallet.pending_withdrawal || 0) - parseFloat(request.amount)
+                        };
+                    }
 
-                await this.supabase
-                    .from('user_wallets')
-                    .update(updateData)
-                    .eq('user_id', request.user_id);
+                    await this.supabaseService.updateUserWallet(request.user_id, updateData);
+                }
             }
 
             // اگر تأیید شد، ثبت تراکنش برداشت
             if (status === 'completed') {
-                await this.supabase
-                    .from('wallet_transactions')
-                    .insert([{
-                        user_id: request.user_id,
-                        type: 'withdrawal',
-                        amount: -parseFloat(request.amount),
-                        currency: request.currency,
-                        status: 'completed',
-                        description: `برداشت به آدرس ${request.wallet_address} (${request.network})`,
-                        created_at: new Date().toISOString()
-                    }]);
+                await this.supabaseService.addWalletTransactionToDB({
+                    userId: request.user_id,
+                    type: 'withdrawal',
+                    amount: -parseFloat(request.amount),
+                    currency: request.currency,
+                    description: `برداشت به آدرس ${request.wallet_address} (${request.network})`
+                });
             }
 
             return true;
@@ -306,48 +227,43 @@ class WalletService {
             }
 
             // آپدیت فرستنده
-            const { error: senderError } = await this.supabase
-                .from('user_wallets')
-                .update(senderUpdate)
-                .eq('user_id', senderId);
-
-            if (senderError) throw senderError;
+            await this.supabaseService.updateUserWallet(senderId, senderUpdate);
 
             // آپدیت گیرنده
-            const { error: receiverError } = await this.supabase
-                .from('user_wallets')
-                .update(receiverUpdate)
-                .eq('user_id', receiverId);
-
-            if (receiverError) throw receiverError;
+            await this.supabaseService.updateUserWallet(receiverId, receiverUpdate);
 
             // ثبت تراکنش‌ها
-            await this.supabase
-                .from('wallet_transactions')
-                .insert([
-                    {
-                        user_id: senderId,
-                        type: 'transfer_sent',
-                        amount: -parseFloat(amount),
-                        currency: currency,
-                        description: `انتقال به کاربر ${receiverId}`,
-                        created_at: new Date().toISOString()
-                    },
-                    {
-                        user_id: receiverId,
-                        type: 'transfer_received',
-                        amount: parseFloat(amount),
-                        currency: currency,
-                        description: `دریافت از کاربر ${senderId}`,
-                        created_at: new Date().toISOString()
-                    }
-                ]);
+            await this.supabaseService.addWalletTransactionToDB({
+                userId: senderId,
+                type: 'transfer_sent',
+                amount: -parseFloat(amount),
+                currency: currency,
+                description: `انتقال به کاربر ${receiverId}`
+            });
+
+            await this.supabaseService.addWalletTransactionToDB({
+                userId: receiverId,
+                type: 'transfer_received',
+                amount: parseFloat(amount),
+                currency: currency,
+                description: `دریافت از کاربر ${senderId}`
+            });
 
             return true;
         } catch (error) {
             console.error('❌ Transfer error:', error);
             throw error;
         }
+    }
+
+    // 10. دریافت تنظیمات کیف پول
+    async getWalletSettings() {
+        return await this.supabaseService.getWalletSettingsFromDB();
+    }
+
+    // 11. آپدیت تنظیمات کیف پول
+    async updateWalletSettings(settings) {
+        return await this.supabaseService.updateWalletSettings(settings);
     }
 }
 
