@@ -186,8 +186,12 @@ class GameService {
         return this.gameData.userLevel;
     }
     
-  // 6. افزایش قدرت استخراج - نسخه اصلاح شده
+ // 6. افزایش قدرت استخراج - نسخه نهایی
 async boostMining() {
+    if (!this.userId) {
+        throw new Error('کاربر لاگین نشده است');
+    }
+    
     // بررسی محدودیت بوست
     if (this.gameData.boostActive) {
         throw new Error('در حال حاضر بوست فعال است. لطفاً صبر کنید.');
@@ -199,13 +203,13 @@ async boostMining() {
     
     const maxDailyBoosts = 3; // حداکثر 3 بوست در روز
     if (boostCountToday >= maxDailyBoosts) {
-        throw new Error(`امکان استفاده از بوست بیش از ${maxDailyBoosts} بار در روز وجود ندارد`);
+        throw new Error(`امکان استفاده از بوست بیش از ${maxDailyBoosts} بار در روز وجود ندارد. امروز ${boostCountToday} بار استفاده کرده‌اید.`);
     }
     
     // بررسی هزینه
     const boostCost = 5000; // هزینه ثابت
     if (this.gameData.sodBalance < boostCost) {
-        throw new Error(`موجودی SOD کافی نیست (نیاز: ${boostCost.toLocaleString()} SOD)`);
+        throw new Error(`موجودی SOD کافی نیست (نیاز: ${boostCost.toLocaleString('fa-IR')} SOD)`);
     }
     
     // کسر هزینه
@@ -221,7 +225,7 @@ async boostMining() {
         type: 'boost',
         amount: -boostCost,
         currency: 'SOD',
-        description: 'خرید قدرت استخراج'
+        description: 'خرید قدرت استخراج (۳۰ دقیقه)'
     });
     
     // ثبت استفاده از بوست
@@ -237,6 +241,12 @@ async boostMining() {
         this.gameData.miningPower = 10 * this.gameData.userLevel; // بازگشت به حالت عادی
         this.gameData.lastUpdated = new Date().toISOString();
         await this.saveToDatabase();
+        
+        // نمایش نوتیفیکیشن
+        if (window.uiService && window.uiService.showNotification) {
+            window.uiService.showNotification('⏰', 'زمان بوست به پایان رسید!');
+        }
+        
         console.log('⏰ Boost expired');
     }, 30 * 60 * 1000); // 30 دقیقه
     
@@ -246,7 +256,9 @@ async boostMining() {
         success: true,
         duration: 30,
         multiplier: 3,
-        remainingBoosts: maxDailyBoosts - boostCountToday - 1
+        remainingBoosts: maxDailyBoosts - boostCountToday - 1,
+        cost: boostCost,
+        newBalance: this.gameData.sodBalance
     };
 }
     
