@@ -1871,6 +1871,689 @@
             usersPage++;
             loadUsers();
         }
+        // ============ توابع مدیریت برداشت‌ها ============
+
+/**
+ * بارگذاری درخواست‌های برداشت در انتظار
+ */
+async function loadPendingWithdrawals() {
+    try {
+        const { data: withdrawals, error } = await supabaseClient
+            .from('withdrawal_requests')
+            .select(`
+                *,
+                users (email, full_name)
+            `)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // یافتن کانتینر مناسب
+        let container = document.getElementById('adminPageWithdrawals');
+        if (!container) {
+            // اگر صفحه برداشت‌ها هنوز ایجاد نشده، آن را ایجاد می‌کنیم
+            await createWithdrawalsPage();
+            container = document.getElementById('adminPageWithdrawals');
+            if (!container) return;
+        }
+
+        let html = `
+            <div class="admin-table-container">
+                <div class="admin-table-header">
+                    <div class="admin-table-title">درخواست‌های برداشت در انتظار</div>
+                    <button class="admin-btn admin-btn-primary" onclick="loadPendingWithdrawals()">
+                        <i class="fas fa-sync-alt"></i> بروزرسانی
+                    </button>
+                </div>
+                <div class="admin-table-content">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>کاربر</th>
+                                <th>مبلغ</th>
+                                <th>آدرس کیف پول</th>
+                                <th>شبکه</th>
+                                <th>تاریخ</th>
+                                <th>وضعیت</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablePendingWithdrawals">
+        `;
+
+        if (!withdrawals || withdrawals.length === 0) {
+            html += `
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 40px; color: var(--admin-text-secondary);">
+                        هیچ درخواست برداشتی در انتظار نیست
+                    </td>
+                </tr>
+            `;
+        } else {
+            withdrawals.forEach((withdrawal, index) => {
+                const user = withdrawal.users;
+                const date = new Date(withdrawal.created_at).toLocaleString('fa-IR');
+                const shortAddress = withdrawal.wallet_address ? 
+                    withdrawal.wallet_address.substring(0, 15) + '...' : '—';
+                
+                html += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>
+                            <div style="font-weight: 600;">${user?.email || 'ناشناس'}</div>
+                            <div style="font-size: 12px; color: var(--admin-text-secondary);">
+                                ${user?.full_name || ''}
+                            </div>
+                        </td>
+                        <td style="font-weight: 600; color: #FF3D00;">${formatCurrency(withdrawal.amount)}</td>
+                        <td>
+                            <div style="font-family: monospace; font-size: 12px;" title="${withdrawal.wallet_address || ''}">
+                                ${shortAddress}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="admin-badge badge-info">${withdrawal.network || 'TRC20'}</span>
+                        </td>
+                        <td>${date}</td>
+                        <td>
+                            <span class="admin-badge badge-pending">در انتظار</span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 5px;">
+                                <button class="admin-btn admin-btn-sm admin-btn-success" onclick="approveWithdrawal('${withdrawal.id}')">
+                                    <i class="fas fa-check"></i> تأیید
+                                </button>
+                                <button class="admin-btn admin-btn-sm admin-btn-danger" onclick="rejectWithdrawal('${withdrawal.id}')">
+                                    <i class="fas fa-times"></i> رد
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error('❌ Load pending withdrawals error:', error);
+        showNotification('خطا در بارگذاری درخواست‌های برداشت', 'error');
+    }
+}
+
+/**
+ * ایجاد صفحه برداشت‌ها (اگر وجود نداشته باشد)
+ */
+async function createWithdrawalsPage() {
+    const pagesContainer = document.querySelector('.admin-content');
+    if (!pagesContainer) return;
+
+    // بررسی اینکه صفحه برداشت‌ها قبلاً ایجاد شده
+    if (document.getElementById('adminPageWithdrawals')) return;
+
+    const pageHTML = `
+        <div id="adminPageWithdrawals" class="admin-page" style="display: none;">
+            <!-- محتوا توسط loadPendingWithdrawals پر می‌شود -->
+        </div>
+    `;
+
+    // اضافه کردن صفحه به انتهای صفحات
+    const lastPage = pagesContainer.querySelector('.admin-page:last-of-type');
+    if (lastPage) {
+        lastPage.insertAdjacentHTML('afterend', pageHTML);
+    } else {
+        pagesContainer.innerHTML += pageHTML;
+    }
+}
+
+// ============ توابع مدیریت پکیج‌ها ============
+
+/**
+ * بارگذاری پکیج‌های فروش
+ */
+async function loadSalePlans() {
+    try {
+        const { data: plans, error } = await supabaseClient
+            .from('sale_plans')
+            .select('*')
+            .order('order_index', { ascending: true });
+
+        if (error) throw error;
+
+        const container = document.getElementById('adminPagePackages');
+        if (!container) {
+            await createPackagesPage();
+            return;
+        }
+
+        let html = `
+            <div class="admin-table-container">
+                <div class="admin-table-header">
+                    <div class="admin-table-title">مدیریت پکیج‌های فروش</div>
+                    <button class="admin-btn admin-btn-success" onclick="showAddPackageModal()">
+                        <i class="fas fa-plus"></i> پکیج جدید
+                    </button>
+                </div>
+                <div class="admin-table-content">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>نام</th>
+                                <th>قیمت (USDT)</th>
+                                <th>مقدار SOD</th>
+                                <th>تخفیف</th>
+                                <th>محبوب</th>
+                                <th>ویژه</th>
+                                <th>وضعیت</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableSalePlans">
+        `;
+
+        if (!plans || plans.length === 0) {
+            html += `
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 40px; color: var(--admin-text-secondary);">
+                        هیچ پکیجی تعریف نشده است
+                    </td>
+                </tr>
+            `;
+        } else {
+            plans.forEach((plan, index) => {
+                html += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td style="font-weight: 600;">${plan.name}</td>
+                        <td>${formatCurrency(plan.price)}</td>
+                        <td>${formatNumber(plan.sod_amount)}</td>
+                        <td>${plan.discount}%</td>
+                        <td>
+                            <span class="admin-badge ${plan.popular ? 'badge-success' : 'badge-info'}">
+                                ${plan.popular ? '✓' : '✗'}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="admin-badge ${plan.featured ? 'badge-success' : 'badge-info'}">
+                                ${plan.featured ? '✓' : '✗'}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="admin-badge ${plan.is_active ? 'badge-success' : 'badge-warning'}">
+                                ${plan.is_active ? 'فعال' : 'غیرفعال'}
+                            </span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 5px;">
+                                <button class="admin-btn admin-btn-sm admin-btn-primary" onclick="editPackage(${plan.id})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="admin-btn admin-btn-sm ${plan.is_active ? 'admin-btn-warning' : 'admin-btn-success'}" 
+                                        onclick="togglePackageStatus(${plan.id}, ${!plan.is_active})">
+                                    <i class="fas ${plan.is_active ? 'fa-eye-slash' : 'fa-eye'}"></i>
+                                </button>
+                                <button class="admin-btn admin-btn-sm admin-btn-danger" onclick="deletePackage(${plan.id})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error('❌ Load sale plans error:', error);
+        showNotification('خطا در بارگذاری پکیج‌ها', 'error');
+    }
+}
+
+/**
+ * تغییر وضعیت پکیج
+ */
+async function togglePackageStatus(packageId, newStatus) {
+    try {
+        const { error } = await supabaseClient
+            .from('sale_plans')
+            .update({ 
+                is_active: newStatus,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', packageId);
+
+        if (error) throw error;
+
+        showNotification(`پکیج ${newStatus ? 'فعال' : 'غیرفعال'} شد`, 'success');
+        await loadSalePlans();
+
+    } catch (error) {
+        console.error('❌ Toggle package status error:', error);
+        showNotification('خطا در تغییر وضعیت پکیج', 'error');
+    }
+}
+
+// ============ توابع مدیریت تنظیمات سیستم ============
+
+/**
+ * بارگذاری تنظیمات سیستم
+ */
+async function loadSystemSettings() {
+    try {
+        const { data: settings, error } = await supabaseClient
+            .from('system_settings')
+            .select('*')
+            .order('category')
+            .order('setting_key');
+
+        if (error) throw error;
+
+        const container = document.getElementById('adminPageSettings');
+        if (!container) {
+            await createSettingsPage();
+            return;
+        }
+
+        // گروه‌بندی تنظیمات بر اساس دسته‌بندی
+        const settingsByCategory = {};
+        settings.forEach(setting => {
+            if (!settingsByCategory[setting.category]) {
+                settingsByCategory[setting.category] = [];
+            }
+            settingsByCategory[setting.category].push(setting);
+        });
+
+        let html = `
+            <div class="admin-tabs" id="settingsTabs">
+        `;
+
+        // ایجاد تب‌ها
+        Object.keys(settingsByCategory).forEach((category, index) => {
+            html += `
+                <div class="admin-tab ${index === 0 ? 'active' : ''}" 
+                     onclick="showSettingsTab('${category}')">
+                    ${getCategoryName(category)}
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+
+        // ایجاد محتوای تب‌ها
+        Object.keys(settingsByCategory).forEach((category, index) => {
+            html += `
+                <div id="settingsTab${capitalizeFirstLetter(category)}" 
+                     class="admin-tab-content ${index === 0 ? 'active' : ''}" 
+                     style="${index === 0 ? '' : 'display: none;'}">
+                    <div class="admin-table-container">
+                        <div class="admin-table-header">
+                            <div class="admin-table-title">تنظیمات ${getCategoryName(category)}</div>
+                            <button class="admin-btn admin-btn-primary" onclick="saveSettings('${category}')">
+                                <i class="fas fa-save"></i> ذخیره تغییرات
+                            </button>
+                        </div>
+                        <div class="admin-table-content">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>تنظیم</th>
+                                        <th>مقدار</th>
+                                        <th>توضیحات</th>
+                                        <th>نوع</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="settingsTable${capitalizeFirstLetter(category)}">
+            `;
+
+            settingsByCategory[category].forEach(setting => {
+                let inputField = '';
+                
+                switch (setting.setting_type) {
+                    case 'number':
+                        inputField = `
+                            <input type="number" 
+                                   class="admin-form-input" 
+                                   id="setting_${setting.setting_key}" 
+                                   value="${setting.setting_value || ''}"
+                                   style="width: 150px; padding: 8px 12px;">
+                        `;
+                        break;
+                    
+                    case 'boolean':
+                        inputField = `
+                            <select class="admin-form-input" 
+                                    id="setting_${setting.setting_key}"
+                                    style="width: 150px; padding: 8px 12px;">
+                                <option value="true" ${setting.setting_value === 'true' ? 'selected' : ''}>فعال</option>
+                                <option value="false" ${setting.setting_value === 'false' ? 'selected' : ''}>غیرفعال</option>
+                            </select>
+                        `;
+                        break;
+                    
+                    default:
+                        inputField = `
+                            <input type="text" 
+                                   class="admin-form-input" 
+                                   id="setting_${setting.setting_key}" 
+                                   value="${setting.setting_value || ''}"
+                                   style="width: 250px; padding: 8px 12px;">
+                        `;
+                }
+
+                html += `
+                    <tr>
+                        <td style="font-weight: 600;">${setting.setting_key}</td>
+                        <td>${inputField}</td>
+                        <td>${setting.description || '—'}</td>
+                        <td>
+                            <span class="admin-badge badge-info">
+                                ${getSettingTypeName(setting.setting_type)}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error('❌ Load system settings error:', error);
+        showNotification('خطا در بارگذاری تنظیمات', 'error');
+    }
+}
+
+/**
+ * ذخیره تنظیمات یک دسته‌بندی
+ */
+async function saveSettings(category) {
+    try {
+        const settingsTable = document.getElementById(`settingsTable${capitalizeFirstLetter(category)}`);
+        if (!settingsTable) return;
+
+        const inputs = settingsTable.querySelectorAll('input, select');
+        const updates = [];
+
+        for (const input of inputs) {
+            const settingKey = input.id.replace('setting_', '');
+            const newValue = input.value;
+
+            updates.push({
+                setting_key: settingKey,
+                setting_value: newValue,
+                updated_at: new Date().toISOString()
+            });
+        }
+
+        // آپدیت دسته‌جمعی
+        for (const update of updates) {
+            const { error } = await supabaseClient
+                .from('system_settings')
+                .update(update)
+                .eq('setting_key', update.setting_key);
+
+            if (error) throw error;
+        }
+
+        showNotification('تنظیمات با موفقیت ذخیره شد', 'success');
+
+    } catch (error) {
+        console.error('❌ Save settings error:', error);
+        showNotification('خطا در ذخیره تنظیمات', 'error');
+    }
+}
+
+// ============ توابع گزارشات ============
+
+/**
+ * بارگذاری گزارشات
+ */
+async function loadReports() {
+    try {
+        // دریافت گزارشات مالی از ویو
+        const { data: financialReport, error: financialError } = await supabaseClient
+            .from('daily_financial_reports')
+            .select('*')
+            .order('report_date', { ascending: false })
+            .limit(30);
+
+        if (financialError) {
+            console.warn('View daily_financial_reports not found, using fallback query');
+            // استفاده از کوئری جایگزین اگر ویو وجود نداشته باشد
+            return loadReportsFallback();
+        }
+
+        const container = document.getElementById('adminPageReports');
+        if (!container) {
+            await createReportsPage();
+            return;
+        }
+
+        let html = `
+            <div class="admin-stats-grid" style="margin-bottom: 30px;">
+                <div class="admin-stat-card">
+                    <div class="admin-stat-title">روزهای گزارش</div>
+                    <div class="admin-stat-value">${financialReport?.length || 0}</div>
+                    <div class="admin-stat-change">
+                        <i class="fas fa-calendar-alt"></i>
+                        ۳۰ روز اخیر
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-table-container">
+                <div class="admin-table-header">
+                    <div class="admin-table-title">گزارش مالی ۳۰ روز اخیر</div>
+                    <button class="admin-btn admin-btn-primary" onclick="exportReport()">
+                        <i class="fas fa-download"></i> خروجی
+                    </button>
+                </div>
+                <div class="admin-table-content">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>تاریخ</th>
+                                <th>واریزها</th>
+                                <th>برداشت‌ها</th>
+                                <th>فروش</th>
+                                <th>کاربران</th>
+                                <th>تراکنش‌ها</th>
+                            </tr>
+                        </thead>
+                        <tbody id="financialReportTable">
+        `;
+
+        if (financialReport && financialReport.length > 0) {
+            financialReport.forEach(report => {
+                html += `
+                    <tr>
+                        <td>${new Date(report.report_date).toLocaleDateString('fa-IR')}</td>
+                        <td style="color: #00C853;">${formatCurrency(report.total_deposits)}</td>
+                        <td style="color: #FF3D00;">${formatCurrency(report.total_withdrawals)}</td>
+                        <td style="color: #FFB300;">${formatCurrency(report.total_sales)}</td>
+                        <td>${report.unique_users}</td>
+                        <td>${report.total_transactions}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            html += `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--admin-text-secondary);">
+                        داده‌ای برای نمایش وجود ندارد
+                    </td>
+                </tr>
+            `;
+        }
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error('❌ Load reports error:', error);
+        showNotification('خطا در بارگذاری گزارشات', 'error');
+    }
+}
+
+// ============ توابع کمکی ============
+
+/**
+ * دریافت نام فارسی دسته‌بندی تنظیمات
+ */
+function getCategoryName(category) {
+    const categories = {
+        'mining': 'استخراج',
+        'rewards': 'پاداش‌ها',
+        'referral': 'معرفی',
+        'general': 'عمومی',
+        'financial': 'مالی',
+        'security': 'امنیت',
+        'maintenance': 'تعمیرات'
+    };
+    return categories[category] || category;
+}
+
+/**
+ * دریافت نام فارسی نوع تنظیمات
+ */
+function getSettingTypeName(type) {
+    const types = {
+        'string': 'متنی',
+        'number': 'عددی',
+        'boolean': 'صحیح/غلط',
+        'json': 'JSON'
+    };
+    return types[type] || type;
+}
+
+/**
+ * نمایش تب تنظیمات
+ */
+function showSettingsTab(category) {
+    // آپدیت تب‌ها
+    document.querySelectorAll('#settingsTabs .admin-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    event.target.classList.add('active');
+
+    // مخفی کردن همه تب‌ها
+    document.querySelectorAll('#adminPageSettings .admin-tab-content').forEach(content => {
+        content.style.display = 'none';
+    });
+
+    // نمایش تب مورد نظر
+    const tabContent = document.getElementById('settingsTab' + capitalizeFirstLetter(category));
+    if (tabContent) {
+        tabContent.style.display = 'block';
+    }
+}
+
+// ============ توابع ایجاد صفحات داینامیک ============
+
+/**
+ * ایجاد صفحاتی که در HTML اصلی وجود ندارند
+ */
+async function createDynamicPages() {
+    const pagesContainer = document.querySelector('.admin-content');
+    if (!pagesContainer) return;
+
+    // لیست صفحاتی که باید ایجاد شوند
+    const pagesToCreate = [
+        {
+            id: 'adminPageWithdrawals',
+            name: 'برداشت‌ها',
+            content: '<div id="adminPageWithdrawals" class="admin-page" style="display: none;"></div>'
+        },
+        {
+            id: 'adminPagePackages',
+            name: 'پکیج‌ها', 
+            content: '<div id="adminPagePackages" class="admin-page" style="display: none;"></div>'
+        },
+        {
+            id: 'adminPageSettings',
+            name: 'تنظیمات',
+            content: '<div id="adminPageSettings" class="admin-page" style="display: none;"></div>'
+        },
+        {
+            id: 'adminPageReports',
+            name: 'گزارشات',
+            content: '<div id="adminPageReports" class="admin-page" style="display: none;"></div>'
+        },
+        {
+            id: 'adminPageLogs',
+            name: 'لاگ‌ها',
+            content: '<div id="adminPageLogs" class="admin-page" style="display: none;"></div>'
+        }
+    ];
+
+    pagesToCreate.forEach(page => {
+        if (!document.getElementById(page.id)) {
+            pagesContainer.innerHTML += page.content;
+        }
+    });
+}
+
+// ============ فراخوانی اولیه ============
+
+// این تابع را به DOMContentLoaded اضافه کنید
+async function initializeAdminPanel() {
+    console.log('🚀 Admin Dashboard loaded');
+    
+    // راه‌اندازی Supabase
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // بررسی احراز هویت
+    await checkAdminAuth();
+    
+    // ایجاد صفحات داینامیک
+    await createDynamicPages();
+    
+    // بارگذاری اولیه
+    await loadAdminData();
+    await loadDashboardStats();
+    await loadUsers();
+    await loadRecentActivities();
+    
+    // بروزرسانی خودکار
+    setInterval(updateAdminDashboard, 30000);
+    
+    console.log('✅ Admin Dashboard initialized');
+}
+
+// جایگزین کردن DOMContentLoaded موجود با نسخه جدید
+document.addEventListener('DOMContentLoaded', initializeAdminPanel);
     </script>
 </body>
 </html>
