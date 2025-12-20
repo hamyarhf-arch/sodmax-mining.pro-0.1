@@ -282,3 +282,103 @@ window.supabaseService = {
 };
 
 console.log('✅ Supabase Service loaded (Database-Only Mode)');
+// 11. دریافت اطلاعات کیف پول
+async function getUserWalletFromDB(userId) {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('user_wallets')
+            .select('*')
+            .eq('user_id', userId)
+            .maybeSingle();
+        
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error('❌ Error getting user wallet:', error.message);
+        return null;
+    }
+}
+
+// 12. آپدیت کیف پول
+async function updateUserWallet(userId, walletData) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('user_wallets')
+            .update({
+                ...walletData,
+                updated_at: new Date().toISOString()
+            })
+            .eq('user_id', userId);
+        
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('❌ Error updating wallet:', error.message);
+        return false;
+    }
+}
+
+// 13. ثبت تراکنش کیف پول
+async function addWalletTransactionToDB(transaction) {
+    try {
+        const { error } = await window.supabaseClient
+            .from('wallet_transactions')
+            .insert([{
+                user_id: transaction.userId,
+                type: transaction.type,
+                amount: transaction.amount,
+                currency: transaction.currency,
+                payment_method: transaction.paymentMethod,
+                transaction_id: transaction.transactionId,
+                status: transaction.status || 'completed',
+                description: transaction.description || '',
+                created_at: new Date().toISOString()
+            }]);
+        
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('❌ Error adding wallet transaction:', error.message);
+        return false;
+    }
+}
+
+// 14. دریافت درخواست‌های برداشت
+async function getWithdrawalRequestsFromDB(status = 'pending', limit = 50) {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('withdrawal_requests')
+            .select('*, users(email, full_name)')
+            .eq('status', status)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('❌ Error getting withdrawal requests:', error.message);
+        return [];
+    }
+}
+
+// 15. دریافت تنظیمات کیف پول
+async function getWalletSettingsFromDB() {
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('wallet_settings')
+            .select('*');
+        
+        if (error) throw error;
+        
+        const settings = {};
+        if (data) {
+            data.forEach(setting => {
+                settings[setting.setting_key] = setting.setting_value;
+            });
+        }
+        return settings;
+    } catch (error) {
+        console.error('❌ Error getting wallet settings:', error.message);
+        return {};
+    }
+}
