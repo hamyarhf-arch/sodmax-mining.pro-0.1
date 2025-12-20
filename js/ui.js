@@ -966,8 +966,8 @@ class UIService {
                 <div class="payment-info">
                     <h4><i class="fab fa-usdt"></i> آدرس کیف پول USDT (TRC20)</h4>
                     <div style="margin-top: 10px;">
-                        <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">TQq6C3qXz7KQ9vL8wZ4Y2x1N</code></p>
-                        <button class="btn btn-sm btn-outline" onclick="window.uiService.copyToClipboard('TQq6C3qXz7KQ9vL8wZ4Y2x1N')" style="margin: 5px 0;">
+                        <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">*****************</code></p>
+                        <button class="btn btn-sm btn-outline" onclick="window.uiService.copyToClipboard('**************')" style="margin: 5px 0;">
                             <i class="fas fa-copy"></i> کپی آدرس
                         </button>
                         <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
