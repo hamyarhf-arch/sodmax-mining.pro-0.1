@@ -2019,5 +2019,117 @@
             return Math.floor(num).toLocaleString('fa-IR');
         }
     </script>
+    <!-- مودال مدیریت کیف پول و درگاه‌ها -->
+<div class="modal" id="walletSettingsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-wallet"></i> تنظیمات کیف پول و درگاه‌ها</h3>
+            <button class="modal-close" onclick="closeModal('walletSettingsModal')">×</button>
+        </div>
+        
+        <div class="tabs" style="margin-bottom: 20px;">
+            <div class="tab active" onclick="showWalletTab('paymentGateways')">💳 درگاه‌های پرداخت</div>
+            <div class="tab" onclick="showWalletTab('withdrawalSettings')">💰 تنظیمات برداشت</div>
+            <div class="tab" onclick="showWalletTab('walletLimits')">⚖️ محدودیت‌ها</div>
+        </div>
+        
+        <!-- تب درگاه‌های پرداخت -->
+        <div class="tab-content active" id="paymentGatewaysTab">
+            <div class="form-group">
+                <label class="form-label">فعال‌سازی درگاه بانکی</label>
+                <input type="checkbox" id="enableBankGateway" checked>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">شماره کارت بانکی</label>
+                <input type="text" id="bankCardNumber" class="form-input" placeholder="6037-XXXX-XXXX-XXXX">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">نام دارنده حساب</label>
+                <input type="text" id="bankAccountHolder" class="form-input" placeholder="نام و نام خانوادگی">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">فعال‌سازی درگاه ارز دیجیتال</label>
+                <input type="checkbox" id="enableCryptoGateway">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">آدرس کیف پول USDT (TRC20)</label>
+                <input type="text" id="usdtWalletAddress" class="form-input" placeholder="TXXXX...">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">آدرس کیف پول USDT (BEP20)</label>
+                <input type="text" id="usdtBep20Address" class="form-input" placeholder="0x...">
+            </div>
+        </div>
+        
+        <!-- تب تنظیمات برداشت -->
+        <div class="tab-content" id="withdrawalSettingsTab">
+            <div class="form-group">
+                <label class="form-label">حداقل برداشت USDT</label>
+                <input type="number" id="minWithdrawalUsdt" class="form-input" value="10" step="0.1">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">حداکثر برداشت USDT</label>
+                <input type="number" id="maxWithdrawalUsdt" class="form-input" value="1000" step="0.1">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">کارمزد برداشت (%)</label>
+                <input type="number" id="withdrawalFeePercent" class="form-input" value="2" step="0.1">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">زمان پردازش برداشت (ساعت)</label>
+                <input type="number" id="withdrawalProcessingTime" class="form-input" value="24">
+            </div>
+        </div>
+        
+        <!-- تب محدودیت‌ها -->
+        <div class="tab-content" id="walletLimitsTab">
+            <div class="form-group">
+                <label class="form-label">حداکثر بوست روزانه</label>
+                <input type="number" id="maxDailyBoosts" class="form-input" value="3">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">حداکثر خرید پنل روزانه</label>
+                <input type="number" id="maxDailyPurchases" class="form-input" value="5">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">محدودیت استخراج روزانه (SOD)</label>
+                <input type="number" id="dailyMiningLimit" class="form-input" value="1000000">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">سقف کیف پول USDT</label>
+                <input type="number" id="walletUsdtCap" class="form-input" value="10000" step="0.1">
+            </div>
+        </div>
+        
+        <button class="btn btn-success" onclick="saveWalletSettings()" style="width: 100%; margin-top: 20px;">
+            <i class="fas fa-save"></i> ذخیره تنظیمات
+        </button>
+    </div>
+</div>
+
+<!-- مودال مدیریت برداشت‌ها -->
+<div class="modal" id="withdrawalManagementModal">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-money-check-alt"></i> مدیریت درخواست‌های برداشت</h3>
+            <button class="modal-close" onclick="closeModal('withdrawalManagementModal')">×</button>
+        </div>
+        
+        <div id="withdrawalRequestsList">
+            <!-- لیست درخواست‌ها اینجا نمایش داده می‌شود -->
+        </div>
+    </div>
+</div>
 </body>
 </html>
