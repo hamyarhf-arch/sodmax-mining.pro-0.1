@@ -1325,7 +1325,7 @@
                 <!-- پنل‌ها با JS ساخته می‌شوند -->
             </div>
         </section>
-<!-- بخش کیف پول و تراکنش‌ها -->
+<!-- بخش کیف پول -->
 <section class="wallet-section" id="walletSection" style="margin: 60px 0;">
     <div class="section-header">
         <h2 class="section-title">💼 کیف پول SODmAX</h2>
@@ -1333,19 +1333,19 @@
     </div>
     
     <div class="stats-view" style="margin-bottom: 30px;">
-        <div class="stat-card" onclick="showWalletActions('deposit')" style="cursor: pointer;">
+        <div class="stat-card" onclick="uiService.showWalletModal('deposit')" style="cursor: pointer;">
             <div class="stat-header">
                 <div class="stat-icon">
                     <i class="fas fa-plus-circle"></i>
                 </div>
                 <div class="stat-info">
                     <div class="stat-title">شارژ کیف پول</div>
-                    <div class="stat-value" id="depositAmount">USDT / SOD</div>
+                    <div class="stat-value" id="depositAmount">USDT</div>
                 </div>
             </div>
         </div>
         
-        <div class="stat-card" onclick="showWalletActions('withdraw')" style="cursor: pointer;">
+        <div class="stat-card" onclick="uiService.showWalletModal('withdraw')" style="cursor: pointer;">
             <div class="stat-header">
                 <div class="stat-icon">
                     <i class="fas fa-minus-circle"></i>
@@ -1359,15 +1359,42 @@
     </div>
     
     <!-- مودال اقدامات کیف پول -->
-    <div class="modal" id="walletActionsModal">
+    <div class="modal" id="walletActionsModal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="walletModalTitle">شارژ کیف پول</h3>
-                <button class="modal-close" onclick="closeWalletModal()">×</button>
+                <button class="modal-close" onclick="uiService.closeWalletModal()">×</button>
             </div>
             
             <div id="walletActionsContent">
                 <!-- محتوای مودال با JS پر می‌شود -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- بخش آمار کیف پول -->
+    <div class="stats-view">
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon">
+                    <i class="fas fa-wallet"></i>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-title">آدرس کیف پول شما</div>
+                    <div class="stat-value" id="walletAddress" style="font-size: 14px; word-break: break-all;">در حال بارگذاری...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon">
+                    <i class="fas fa-history"></i>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-title">تعداد تراکنش‌ها</div>
+                    <div class="stat-value" id="walletTransactionCount">۰</div>
+                </div>
             </div>
         </div>
     </div>
@@ -1528,6 +1555,7 @@
     </script>
 </body>
 </html>
+
 
 
 
