@@ -1104,3 +1104,273 @@ copyToClipboard(text) {
         .then(() => this.showNotification('✅', 'آدرس کپی شد'))
         .catch(() => this.showNotification('❌', 'خطا در کپی کردن'));
 }
+// 31. نمایش مودال کیف پول
+showWalletModal(action) {
+    if (!this.authService?.isUserVerified()) {
+        this.showNotification('❌', 'ابتدا ثبت‌نام و وارد شوید');
+        this.showLogin();
+        return;
+    }
+    
+    const modal = document.getElementById('walletActionsModal');
+    const title = document.getElementById('walletModalTitle');
+    const content = document.getElementById('walletActionsContent');
+    
+    if (!modal || !title || !content) {
+        console.error('❌ Wallet modal elements not found');
+        return;
+    }
+    
+    if (action === 'deposit') {
+        title.textContent = '💳 شارژ کیف پول';
+        content.innerHTML = `
+            <div class="form-group">
+                <label class="form-label">مبلغ (USDT)</label>
+                <input type="number" id="depositAmountInput" class="form-input" placeholder="10" min="1" step="0.1" value="10">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">روش پرداخت</label>
+                <select id="paymentMethod" class="form-input">
+                    <option value="bank_transfer">💳 انتقال بانکی</option>
+                    <option value="crypto_usdt">🔗 USDT (TRC20)</option>
+                    <option value="crypto_bep20">🔗 USDT (BEP20)</option>
+                </select>
+            </div>
+            
+            <div id="paymentDetails">
+                <div class="payment-info">
+                    <p>💡 پس از انتخاب روش پرداخت، اطلاعات لازم نمایش داده می‌شود.</p>
+                </div>
+            </div>
+            
+            <button class="btn btn-success" onclick="uiService.processDeposit()" style="width: 100%;">
+                <i class="fas fa-credit-card"></i> ادامه پرداخت
+            </button>
+        `;
+        
+        // گوش دادن به تغییر روش پرداخت
+        setTimeout(() => {
+            const paymentMethod = document.getElementById('paymentMethod');
+            if (paymentMethod) {
+                paymentMethod.addEventListener('change', (e) => {
+                    this.showPaymentDetails(e.target.value);
+                });
+                // نمایش جزئیات پیش‌فرض
+                this.showPaymentDetails('bank_transfer');
+            }
+        }, 100);
+        
+    } else if (action === 'withdraw') {
+        title.textContent = '💰 برداشت از کیف پول';
+        content.innerHTML = `
+            <div class="form-group">
+                <label class="form-label">مبلغ برداشت (USDT)</label>
+                <input type="number" id="withdrawAmountInput" class="form-input" placeholder="10" min="10" step="0.1" value="10">
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                    حداقل برداشت: 10 USDT
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">آدرس کیف پول مقصد</label>
+                <input type="text" id="withdrawWalletAddress" class="form-input" placeholder="TXXXX... یا 0x...">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">شبکه انتقال</label>
+                <select id="withdrawNetwork" class="form-input">
+                    <option value="TRC20">TRC20 (تزریون)</option>
+                    <option value="BEP20">BEP20 (بین‌بی)</option>
+                </select>
+            </div>
+            
+            <div class="withdrawal-info">
+                <p><i class="fas fa-info-circle"></i> کارمزد برداشت: <strong>2%</strong></p>
+                <p>⏱ زمان پردازش: <strong>24 ساعت</strong></p>
+            </div>
+            
+            <button class="btn btn-primary" onclick="uiService.processWithdrawal()" style="width: 100%;">
+                <i class="fas fa-paper-plane"></i> ثبت درخواست برداشت
+            </button>
+        `;
+    }
+    
+    modal.style.display = 'flex';
+}
+
+// 32. نمایش جزئیات پرداخت
+async showPaymentDetails(method) {
+    const detailsDiv = document.getElementById('paymentDetails');
+    if (!detailsDiv) return;
+    
+    const amountInput = document.getElementById('depositAmountInput');
+    const amount = amountInput ? parseFloat(amountInput.value) || 0 : 0;
+    
+    let details = '';
+    
+    if (method === 'bank_transfer') {
+        details = `
+            <div class="payment-info">
+                <h4><i class="fas fa-university"></i> اطلاعات حساب بانکی</h4>
+                <div style="margin-top: 10px;">
+                    <p><strong>شماره کارت:</strong> 6037-7994-1234-5678</p>
+                    <p><strong>دارنده حساب:</strong> شرکت SODmAX</p>
+                    <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
+                    <p><strong>توضیحات:</strong> شماره کاربری خود را در توضیحات انتقال ذکر کنید</p>
+                </div>
+                <p style="color: var(--warning); margin-top: 15px;">
+                    ⚠️ پس از واریز، فیش پرداختی را برای ما ارسال کنید.
+                </p>
+            </div>
+        `;
+    } else if (method === 'crypto_usdt') {
+        details = `
+            <div class="payment-info">
+                <h4><i class="fab fa-usdt"></i> آدرس کیف پول USDT (TRC20)</h4>
+                <div style="margin-top: 10px;">
+                    <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">TQq6C3qXz7KQ9vL8wZ4Y2x1N</code></p>
+                    <button class="btn btn-sm btn-outline" onclick="uiService.copyToClipboard('TQq6C3qXz7KQ9vL8wZ4Y2x1N')" style="margin: 5px 0;">
+                        <i class="fas fa-copy"></i> کپی آدرس
+                    </button>
+                    <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
+                    <p><strong>شبکه:</strong> TRC20 (تزریون) - حتماً انتخاب شود</p>
+                </div>
+                <p style="color: var(--warning); margin-top: 15px;">
+                    ⚠️ انتقال از شبکه‌های دیگر باعث از دست رفتن موجودی می‌شود.
+                </p>
+            </div>
+        `;
+    } else if (method === 'crypto_bep20') {
+        details = `
+            <div class="payment-info">
+                <h4><i class="fab fa-ethereum"></i> آدرس کیف پول USDT (BEP20)</h4>
+                <div style="margin-top: 10px;">
+                    <p><strong>آدرس:</strong> <code style="background: rgba(0,0,0,0.3); padding: 5px; border-radius: 4px; display: inline-block; margin: 5px 0;">0x7a9f3b3c8d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8</code></p>
+                    <button class="btn btn-sm btn-outline" onclick="uiService.copyToClipboard('0x7a9f3b3c8d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8')" style="margin: 5px 0;">
+                        <i class="fas fa-copy"></i> کپی آدرس
+                    </button>
+                    <p><strong>مبلغ:</strong> <span id="finalAmount">${amount}</span> USDT</p>
+                    <p><strong>شبکه:</strong> BEP20 (بین‌بی) - حتماً انتخاب شود</p>
+                </div>
+                <p style="color: var(--warning); margin-top: 15px;">
+                    ⚠️ انتقال از شبکه‌های دیگر باعث از دست رفتن موجودی می‌شود.
+                </p>
+            </div>
+        `;
+    }
+    
+    detailsDiv.innerHTML = details;
+}
+
+// 33. پردازش شارژ
+async processDeposit() {
+    const amountInput = document.getElementById('depositAmountInput');
+    const methodSelect = document.getElementById('paymentMethod');
+    
+    if (!amountInput || !methodSelect) {
+        this.showNotification('❌', 'خطا در دریافت اطلاعات');
+        return;
+    }
+    
+    const amount = parseFloat(amountInput.value);
+    const method = methodSelect.value;
+    
+    if (!amount || amount < 1) {
+        this.showNotification('❌', 'لطفاً مبلغ معتبر وارد کنید (حداقل 1 USDT)');
+        return;
+    }
+    
+    try {
+        // نمایش پیام در حال پردازش
+        this.showNotification('💳', `درخواست شارژ ${amount} USDT ثبت شد...`);
+        
+        // بستن مودال
+        this.closeWalletModal();
+        
+        // نمایش اطلاعات پرداخت
+        let paymentInfo = '';
+        if (method === 'bank_transfer') {
+            paymentInfo = 'لطفاً مبلغ را به شماره کارت اعلام شده واریز کنید و فیش را ارسال نمایید.';
+        } else if (method === 'crypto_usdt') {
+            paymentInfo = `لطفاً ${amount} USDT را به آدرس TRC20 ارسال کنید.`;
+        } else if (method === 'crypto_bep20') {
+            paymentInfo = `لطفاً ${amount} USDT را به آدرس BEP20 ارسال کنید.`;
+        }
+        
+        setTimeout(() => {
+            this.showNotification('📋', `${paymentInfo} پس از تأیید، موجودی شما افزایش می‌یابد.`);
+        }, 1000);
+        
+    } catch (error) {
+        console.error('❌ Deposit error:', error);
+        this.showNotification('❌', 'خطا در ثبت درخواست شارژ');
+    }
+}
+
+// 34. پردازش برداشت
+async processWithdrawal() {
+    const amountInput = document.getElementById('withdrawAmountInput');
+    const addressInput = document.getElementById('withdrawWalletAddress');
+    const networkSelect = document.getElementById('withdrawNetwork');
+    
+    if (!amountInput || !addressInput || !networkSelect) {
+        this.showNotification('❌', 'خطا در دریافت اطلاعات');
+        return;
+    }
+    
+    const amount = parseFloat(amountInput.value);
+    const address = addressInput.value.trim();
+    const network = networkSelect.value;
+    
+    if (!amount || amount < 10) {
+        this.showNotification('❌', 'حداقل برداشت 10 USDT می‌باشد');
+        return;
+    }
+    
+    if (!address || address.length < 10) {
+        this.showNotification('❌', 'لطفاً آدرس کیف پول معتبر وارد کنید');
+        return;
+    }
+    
+    try {
+        // استفاده از WalletService
+        if (window.walletService) {
+            const result = await window.walletService.requestWithdrawal(
+                this.userId,
+                amount,
+                'USDT',
+                address,
+                network
+            );
+            
+            if (result.success) {
+                this.showNotification('✅', `درخواست برداشت ${amount} USDT ثبت شد. زمان پردازش: ${result.processingTime} ساعت`);
+                this.closeWalletModal();
+                this.updateGameUI();
+            } else {
+                this.showNotification('❌', result.error || 'خطا در ثبت درخواست برداشت');
+            }
+        } else {
+            this.showNotification('❌', 'سرویس کیف پول در دسترس نیست');
+        }
+    } catch (error) {
+        console.error('❌ Withdrawal error:', error);
+        this.showNotification('❌', error.message || 'خطا در ثبت درخواست برداشت');
+    }
+}
+
+// 35. بستن مودال کیف پول
+closeWalletModal() {
+    const modal = document.getElementById('walletActionsModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// 36. کپی به کلیپ‌بورد
+copyToClipboard(text) {
+    navigator.clipboard.writeText(text)
+        .then(() => this.showNotification('✅', 'آدرس کپی شد'))
+        .catch(() => this.showNotification('❌', 'خطا در کپی کردن'));
+}
